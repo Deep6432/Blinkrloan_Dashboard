@@ -508,11 +508,19 @@ def api_dpd_buckets(request):
     # Store the selected DPD bucket for highlighting
     selected_dpd = request.GET.get('dpd')
     
-    if request.GET.get('state'):
-        queryset = queryset.filter(state=request.GET.get('state'))
+    # Apply hierarchical state and city filtering
+    state_filter = request.GET.get('state')
+    city_filter = request.GET.get('city')
     
-    if request.GET.get('city'):
-        queryset = queryset.filter(city=request.GET.get('city'))
+    if state_filter:
+        queryset = queryset.filter(state=state_filter)
+        
+        if city_filter:
+            # If both state and city are selected, filter by both
+            queryset = queryset.filter(city=city_filter)
+    elif city_filter:
+        # If only city is selected, filter by city
+        queryset = queryset.filter(city=city_filter)
     
     # Define normalized DPD bucket mapping
     dpd_bucket_mapping = {
@@ -612,7 +620,27 @@ def api_kpi_data(request):
         # Calculate KPIs from filtered records
         kpi_data = calculate_kpi_from_records(filtered_records)
 
-        return JsonResponse({'data': kpi_data})
+        # Extract filter options for dropdowns
+        unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '') for record in records if record.get('city'))))
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
+        unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
+        
+        # Get unique DPD buckets and normalize them
+        all_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in records if record.get('dpd_bucket')))
+        normalized_dpd_buckets = [normalize_dpd_bucket(bucket) for bucket in all_dpd_buckets if bucket]
+        bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'DPD 121-150', 'DPD 151-180', 'DPD 181-365', 'DPD 365+', 'No DPD']
+        unique_dpd_buckets = [bucket for bucket in bucket_order if bucket in normalized_dpd_buckets]
+
+        return JsonResponse({
+            'data': kpi_data,
+            'filter_options': {
+                'states': unique_states,
+                'cities': unique_cities,
+                'closing_statuses': unique_closed_statuses,
+                'dpd_buckets': unique_dpd_buckets
+            }
+        })
     except Exception as e:
         logger.error(f"Error fetching KPI data: {e}")
         return JsonResponse({'error': 'Failed to fetch data'}, status=500)
@@ -631,11 +659,19 @@ def api_city_collected(request):
     if request.GET.get('dpd'):
         queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
 
-    if request.GET.get('state'):
-        queryset = queryset.filter(state=request.GET.get('state'))
-
-    if request.GET.get('city'):
-        queryset = queryset.filter(city=request.GET.get('city'))
+    # Apply hierarchical state and city filtering
+    state_filter = request.GET.get('state')
+    city_filter = request.GET.get('city')
+    
+    if state_filter:
+        queryset = queryset.filter(state=state_filter)
+        
+        if city_filter:
+            # If both state and city are selected, filter by both
+            queryset = queryset.filter(city=city_filter)
+    elif city_filter:
+        # If only city is selected, filter by city
+        queryset = queryset.filter(city=city_filter)
 
     # Group by city and calculate collection metrics
     city_data = queryset.values('city').annotate(
@@ -700,11 +736,19 @@ def api_city_uncollected(request):
     if request.GET.get('dpd'):
         queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
 
-    if request.GET.get('state'):
-        queryset = queryset.filter(state=request.GET.get('state'))
-
-    if request.GET.get('city'):
-        queryset = queryset.filter(city=request.GET.get('city'))
+    # Apply hierarchical state and city filtering
+    state_filter = request.GET.get('state')
+    city_filter = request.GET.get('city')
+    
+    if state_filter:
+        queryset = queryset.filter(state=state_filter)
+        
+        if city_filter:
+            # If both state and city are selected, filter by both
+            queryset = queryset.filter(city=city_filter)
+    elif city_filter:
+        # If only city is selected, filter by city
+        queryset = queryset.filter(city=city_filter)
 
     # Group by city and calculate collection metrics
     city_data = queryset.values('city').annotate(
@@ -854,11 +898,19 @@ def api_dpd_bucket_details(request):
     if request.GET.get('dpd'):
         queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
     
-    if request.GET.get('state'):
-        queryset = queryset.filter(state=request.GET.get('state'))
+    # Apply hierarchical state and city filtering
+    state_filter = request.GET.get('state')
+    city_filter = request.GET.get('city')
     
-    if request.GET.get('city'):
-        queryset = queryset.filter(city=request.GET.get('city'))
+    if state_filter:
+        queryset = queryset.filter(state=state_filter)
+        
+        if city_filter:
+            # If both state and city are selected, filter by both
+            queryset = queryset.filter(city=city_filter)
+    elif city_filter:
+        # If only city is selected, filter by city
+        queryset = queryset.filter(city=city_filter)
     
     # Apply search filter
     if search:
@@ -963,6 +1015,64 @@ def logout_view(request):
     messages.info(request, 'You have been logged out successfully.')
     return redirect('dashboard:login')
 
+
+@require_http_methods(["GET"])
+def api_cities_by_state(request):
+    """API endpoint to get cities for a selected state based on current filters"""
+    state = request.GET.get('state')
+    
+    if not state:
+        return JsonResponse({'cities': []})
+    
+    try:
+        # Get data from external API (same as other endpoints)
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        records = data.get('pr', [])
+        
+        # Apply the same filters as other endpoints (date range, etc.) but exclude state/city filters
+        filtered_records = []
+        
+        # Apply date range filter if provided
+        if request.GET.get('date_from') and request.GET.get('date_to'):
+            try:
+                date_from = datetime.strptime(request.GET.get('date_from'), '%Y-%m-%d').date()
+                date_to = datetime.strptime(request.GET.get('date_to'), '%Y-%m-%d').date()
+                date_type = request.GET.get('date_type', 'repayment_date')
+                
+                for r in records:
+                    if r.get(date_type):
+                        parsed_date = parse_datetime_safely(r[date_type])
+                        if parsed_date and date_from <= parsed_date <= date_to:
+                            filtered_records.append(r)
+                records = filtered_records
+            except (ValueError, AttributeError):
+                pass
+        
+        # Apply other filters (excluding state and city)
+        if request.GET.get('closing_status'):
+            records = [r for r in records if r.get('closed_status') == request.GET.get('closing_status')]
+        
+        if request.GET.get('dpd'):
+            records = [r for r in records if r.get('dpd_bucket') == request.GET.get('dpd')]
+        
+        # Filter by the selected state
+        state_records = [r for r in records if r.get('state') == state]
+        
+        # Extract cities from the filtered records and apply normalization
+        cities = set()
+        for record in state_records:
+            city = record.get('city')
+            if city:
+                normalized_city = normalize_city_name(city)
+                cities.add(normalized_city)
+        
+        return JsonResponse({'cities': sorted(list(cities))})
+    
+    except Exception as e:
+        logger.error(f"Error fetching cities for state {state}: {e}")
+        return JsonResponse({'cities': []})
 
 @require_http_methods(["GET"])
 def api_total_applications_details(request):
@@ -1131,6 +1241,35 @@ def normalize_city_name(city_name):
     
     return city_name
 
+def normalize_dpd_bucket(bucket):
+    """Normalize DPD bucket names"""
+    if not bucket:
+        return bucket
+    
+    # Define mapping for DPD buckets
+    dpd_bucket_mapping = {
+        '0': '0 days DPD',
+        '0-30': 'DPD 1-30',
+        'DPD 1-30': 'DPD 1-30',
+        '31-60': 'DPD 31-60',
+        'DPD 31-60': 'DPD 31-60',
+        '61-90': 'DPD 61-90',
+        'DPD 61-90': 'DPD 61-90',
+        '91-120': 'DPD 91-120',
+        'DPD 91-120': 'DPD 91-120',
+        '121-150': 'DPD 121-150',
+        'DPD 121-150': 'DPD 121-150',
+        '151-180': 'DPD 151-180',
+        'DPD 151-180': 'DPD 151-180',
+        '181-365': 'DPD 181-365',
+        'DPD 181-365': 'DPD 181-365',
+        '365+': 'DPD 365+',
+        'DPD 365+': 'DPD 365+',
+        'No DPD': 'No DPD'
+    }
+    
+    return dpd_bucket_mapping.get(bucket, bucket)
+
 def apply_fraud_filters(records, request):
     """Apply filters to fraud records based on request parameters"""
     if request.GET.get('date_from') and request.GET.get('date_to'):
@@ -1165,11 +1304,33 @@ def apply_fraud_filters(records, request):
     if request.GET.get('dpd'):
         records = [r for r in records if r.get('dpd_bucket') == request.GET.get('dpd')]
     
-    if request.GET.get('state'):
-        records = [r for r in records if r.get('state') == request.GET.get('state')]
+    # Apply state and city filters with proper hierarchy
+    state_filter = request.GET.get('state')
+    city_filter = request.GET.get('city')
     
-    if request.GET.get('city'):
-        records = [r for r in records if r.get('city') == request.GET.get('city')]
+    if state_filter:
+        # Filter by state first
+        records = [r for r in records if r.get('state') == state_filter]
+        
+        if city_filter:
+            # If both state and city are selected, filter by both
+            # Apply city normalization for comparison
+            filtered_records = []
+            for r in records:
+                record_city = normalize_city_name(r.get('city', ''))
+                filter_city = normalize_city_name(city_filter)
+                if record_city == filter_city:
+                    filtered_records.append(r)
+            records = filtered_records
+    elif city_filter:
+        # If only city is selected, filter by city (with normalization)
+        filtered_records = []
+        filter_city = normalize_city_name(city_filter)
+        for r in records:
+            record_city = normalize_city_name(r.get('city', ''))
+            if record_city == filter_city:
+                filtered_records.append(r)
+        records = filtered_records
     
     return records
 
@@ -1593,16 +1754,3 @@ def api_fraud_city_uncollected(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@require_http_methods(["GET"])
-def api_cities_by_state(request):
-    """API endpoint to get cities for a specific state"""
-    state = request.GET.get('state')
-    if not state:
-        return JsonResponse({'cities': []})
-    
-    try:
-        # Get unique cities for the selected state
-        cities = list(LoanRecord.objects.filter(state=state).values_list('city', flat=True).distinct().order_by('city'))
-        return JsonResponse({'cities': cities})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
