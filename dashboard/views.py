@@ -342,6 +342,39 @@ def dashboard_view(request):
 
         # Calculate KPIs from filtered records
         kpis = calculate_kpi_from_records(filtered_records)
+        
+        # Extract unique values from FILTERED external API data for filter options
+        unique_states = sorted(list(set(record.get('state', '') for record in filtered_records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '') for record in filtered_records if record.get('city'))))
+        
+        # Get unique closed statuses and filter out Active and Closed
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in filtered_records if record.get('closed_status')))
+        unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
+        
+        # Normalize DPD buckets for filter dropdown
+        dpd_bucket_mapping = {
+            '0': '0 days DPD',
+            '0-30': 'DPD 1-30',
+            'DPD 1-30': 'DPD 1-30',
+            '31-60': 'DPD 31-60',
+            'DPD 31-60': 'DPD 31-60',
+            '61-90': 'DPD 61-90',
+            'DPD 61-90': 'DPD 61-90',
+            '91-120': 'DPD 91-120',
+            'No DPD': 'No DPD'
+        }
+        
+        raw_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in filtered_records if record.get('dpd_bucket')))
+        normalized_dpd_buckets = set()
+        
+        for bucket in raw_dpd_buckets:
+            normalized_bucket = dpd_bucket_mapping.get(bucket, bucket)
+            normalized_dpd_buckets.add(normalized_bucket)
+        
+        # Convert to sorted list for consistent ordering
+        bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'No DPD']
+        unique_dpd_buckets = [bucket for bucket in bucket_order if bucket in normalized_dpd_buckets]
+        
     except Exception as e:
         logger.error(f"Error fetching data for dashboard view: {e}")
         # Fallback to empty data
@@ -373,21 +406,24 @@ def dashboard_view(request):
             'fresh_principal_outstanding': 0,
             'reloan_principal_outstanding': 0
         }
-    
-    # Get unique values for filters from external API data
-    try:
-        # Fetch data from external API to get filter options
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
         
-        # Extract unique values from external API data
-        unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
-        unique_cities = sorted(list(set(record.get('city', '') for record in records if record.get('city'))))
+        # Fallback to empty filter options
+        unique_states = []
+        unique_cities = []
+        unique_closed_statuses = []
+        unique_dpd_buckets = []
+    
+    # Get unique values for filters from FILTERED external API data
+    try:
+        # Use the filtered_records that were already calculated above
+        # This ensures filter options match the currently displayed data
+        
+        # Extract unique values from FILTERED external API data
+        unique_states = sorted(list(set(record.get('state', '') for record in filtered_records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '') for record in filtered_records if record.get('city'))))
         
         # Get unique closed statuses and filter out Active and Closed
-        all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in filtered_records if record.get('closed_status')))
         unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
         
         # Normalize DPD buckets for filter dropdown
@@ -403,7 +439,7 @@ def dashboard_view(request):
             'No DPD': 'No DPD'
         }
         
-        raw_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in records if record.get('dpd_bucket')))
+        raw_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in filtered_records if record.get('dpd_bucket')))
         normalized_dpd_buckets = set()
         
         for bucket in raw_dpd_buckets:
@@ -620,14 +656,14 @@ def api_kpi_data(request):
         # Calculate KPIs from filtered records
         kpi_data = calculate_kpi_from_records(filtered_records)
 
-        # Extract filter options for dropdowns
-        unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
-        unique_cities = sorted(list(set(record.get('city', '') for record in records if record.get('city'))))
-        all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
+        # Extract filter options for dropdowns from FILTERED records (not original records)
+        unique_states = sorted(list(set(record.get('state', '') for record in filtered_records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '') for record in filtered_records if record.get('city'))))
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in filtered_records if record.get('closed_status')))
         unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
         
-        # Get unique DPD buckets and normalize them
-        all_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in records if record.get('dpd_bucket')))
+        # Get unique DPD buckets and normalize them from filtered records
+        all_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in filtered_records if record.get('dpd_bucket')))
         normalized_dpd_buckets = [normalize_dpd_bucket(bucket) for bucket in all_dpd_buckets if bucket]
         bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'DPD 121-150', 'DPD 151-180', 'DPD 181-365', 'DPD 365+', 'No DPD']
         unique_dpd_buckets = [bucket for bucket in bucket_order if bucket in normalized_dpd_buckets]

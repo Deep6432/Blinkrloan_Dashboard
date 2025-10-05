@@ -2050,22 +2050,25 @@ function setupAutoFilters() {
             const form = input.closest('form');
             const formId = form ? form.id : 'filterForm';
             
-            // For date inputs, check if both dates are provided before submitting
+            // For date inputs, update filter options when any date changes
             if (input.type === 'date') {
                 const dateFrom = form.querySelector('input[name="date_from"]').value;
                 const dateTo = form.querySelector('input[name="date_to"]').value;
                 
-                // Only submit if both dates are provided or both are empty
-                if ((dateFrom && dateTo) || (!dateFrom && !dateTo)) {
-                    if (formId === 'fraudFilterForm') {
-                        // Handle fraud tab filters - reload fraud data
-                        applyFraudFilters();
-                    } else {
-                        // Save main filters before submitting
-                        saveMainFilters();
-                    document.getElementById('filterForm').submit();
+                // Update filter options whenever any date is changed
+                updateFilterOptions(form).then(() => {
+                    // Only submit if both dates are provided or both are empty
+                    if ((dateFrom && dateTo) || (!dateFrom && !dateTo)) {
+                        if (formId === 'fraudFilterForm') {
+                            // Handle fraud tab filters - reload fraud data
+                            applyFraudFilters();
+                        } else {
+                            // Save main filters before submitting
+                            saveMainFilters();
+                        document.getElementById('filterForm').submit();
+                        }
                     }
-                }
+                });
             } else {
                 // For dropdowns, apply immediately
                 if (formId === 'fraudFilterForm') {
@@ -2079,6 +2082,119 @@ function setupAutoFilters() {
             }
         });
     });
+}
+
+// Function to update all filter options based on current filters
+async function updateFilterOptions(form) {
+    try {
+        console.log('Updating filter options...');
+        
+        // Get current filter values from the form
+        const dateFrom = form.querySelector('input[name="date_from"]')?.value;
+        const dateTo = form.querySelector('input[name="date_to"]')?.value;
+        const dateType = form.querySelector('select[name="date_type"]')?.value;
+        const closingStatus = form.querySelector('select[name="closing_status"]')?.value;
+        const dpd = form.querySelector('select[name="dpd"]')?.value;
+        
+        console.log('Current filters:', { dateFrom, dateTo, dateType, closingStatus, dpd });
+        
+        // Build URL with current filters
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (dateType) params.append('date_type', dateType);
+        if (closingStatus) params.append('closing_status', closingStatus);
+        if (dpd) params.append('dpd', dpd);
+        
+        console.log('Fetching filter options with params:', params.toString());
+        const response = await fetch(`/api/kpi-data/?${params.toString()}`);
+        const data = await response.json();
+        
+        console.log('Received filter options:', data.filter_options);
+        
+        if (data && data.filter_options) {
+            const options = data.filter_options;
+            
+            // Update states dropdown
+            const stateSelect = form.querySelector('select[name="state"]');
+            if (stateSelect) {
+                const currentState = stateSelect.value;
+                stateSelect.innerHTML = '<option value="">All States</option>';
+                options.states.forEach(state => {
+                    const option = document.createElement('option');
+                    option.value = state;
+                    option.textContent = state;
+                    if (state === currentState) option.selected = true;
+                    stateSelect.appendChild(option);
+                });
+            }
+            
+            // Update cities dropdown
+            const citySelect = form.querySelector('select[name="city"]');
+            if (citySelect) {
+                const currentCity = citySelect.value;
+                citySelect.innerHTML = '<option value="">All Cities</option>';
+                
+                // If a state is selected, update cities for that state
+                const selectedState = stateSelect?.value;
+                if (selectedState) {
+                    try {
+                        const cityParams = new URLSearchParams(params);
+                        cityParams.append('state', selectedState);
+                        const cityResponse = await fetch(`/api/cities-by-state/?${cityParams.toString()}`);
+                        const cityData = await cityResponse.json();
+                        
+                        cityData.cities.forEach(city => {
+                            const option = document.createElement('option');
+                            option.value = city;
+                            option.textContent = city;
+                            if (city === currentCity) option.selected = true;
+                            citySelect.appendChild(option);
+                        });
+                    } catch (error) {
+                        console.error('Error fetching cities for state:', error);
+                    }
+                }
+            }
+            
+            // Update closing status dropdown
+            const closingStatusSelect = form.querySelector('select[name="closing_status"]');
+            if (closingStatusSelect) {
+                const currentStatus = closingStatusSelect.value;
+                closingStatusSelect.innerHTML = '<option value="">All Status</option>';
+                options.closing_statuses.forEach(status => {
+                    const option = document.createElement('option');
+                    option.value = status;
+                    option.textContent = status;
+                    if (status === currentStatus) option.selected = true;
+                    closingStatusSelect.appendChild(option);
+                });
+            }
+            
+            // Update DPD buckets dropdown
+            const dpdSelect = form.querySelector('select[name="dpd"]');
+            if (dpdSelect) {
+                const currentDpd = dpdSelect.value;
+                dpdSelect.innerHTML = '<option value="">All DPD</option>';
+                options.dpd_buckets.forEach(bucket => {
+                    const option = document.createElement('option');
+                    option.value = bucket;
+                    option.textContent = bucket;
+                    if (bucket === currentDpd) option.selected = true;
+                    dpdSelect.appendChild(option);
+                });
+            }
+            
+            console.log('Updated filter options with current filters:', {
+                states: options.states.length,
+                cities: citySelect?.options.length || 0,
+                closing_statuses: options.closing_statuses.length,
+                dpd_buckets: options.dpd_buckets.length
+            });
+        }
+    } catch (error) {
+        console.error('Error updating filter options:', error);
+    }
 }
 
 // Function to update city options based on selected state
@@ -2882,8 +2998,26 @@ function switchTab(tabName) {
 // Populate fraud filter dropdowns with data
 async function populateFraudFilterDropdowns() {
     try {
-        // Fetch filter options from the main API (since fraud uses same data structure)
-        const response = await fetch('/api/kpi-data/');
+        // Get current filter values from the fraud form
+        const form = document.getElementById('fraudFilterForm');
+        if (!form) return;
+        
+        const dateFrom = form.querySelector('input[name="date_from"]')?.value;
+        const dateTo = form.querySelector('input[name="date_to"]')?.value;
+        const dateType = form.querySelector('select[name="date_type"]')?.value;
+        const closingStatus = form.querySelector('select[name="closing_status"]')?.value;
+        const dpd = form.querySelector('select[name="dpd"]')?.value;
+        
+        // Build URL with current filters
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (dateType) params.append('date_type', dateType);
+        if (closingStatus) params.append('closing_status', closingStatus);
+        if (dpd) params.append('dpd', dpd);
+        
+        // Fetch filter options from the main API with current filters
+        const response = await fetch(`/api/kpi-data/?${params.toString()}`);
         const data = await response.json();
         
         if (data && data.filter_options) {
@@ -2892,11 +3026,13 @@ async function populateFraudFilterDropdowns() {
             // Populate states dropdown
             const fraudStateSelect = document.getElementById('fraudState');
             if (fraudStateSelect && options.states) {
+                const currentState = fraudStateSelect.value;
                 fraudStateSelect.innerHTML = '<option value="">All States</option>';
                 options.states.forEach(state => {
                     const option = document.createElement('option');
                     option.value = state;
                     option.textContent = state;
+                    if (state === currentState) option.selected = true;
                     fraudStateSelect.appendChild(option);
                 });
             }
@@ -2904,17 +3040,41 @@ async function populateFraudFilterDropdowns() {
             // Populate cities dropdown (will be updated based on selected state)
             const fraudCitySelect = document.getElementById('fraudCity');
             if (fraudCitySelect) {
+                const currentCity = fraudCitySelect.value;
                 fraudCitySelect.innerHTML = '<option value="">All Cities</option>';
+                
+                // If a state is selected, update cities for that state
+                const selectedState = fraudStateSelect?.value;
+                if (selectedState) {
+                    try {
+                        const cityParams = new URLSearchParams(params);
+                        cityParams.append('state', selectedState);
+                        const cityResponse = await fetch(`/api/cities-by-state/?${cityParams.toString()}`);
+                        const cityData = await cityResponse.json();
+                        
+                        cityData.cities.forEach(city => {
+                            const option = document.createElement('option');
+                            option.value = city;
+                            option.textContent = city;
+                            if (city === currentCity) option.selected = true;
+                            fraudCitySelect.appendChild(option);
+                        });
+                    } catch (error) {
+                        console.error('Error fetching cities for state:', error);
+                    }
+                }
             }
             
             // Populate closing status dropdown
             const fraudClosingStatusSelect = document.getElementById('fraudClosingStatus');
             if (fraudClosingStatusSelect && options.closing_statuses) {
+                const currentStatus = fraudClosingStatusSelect.value;
                 fraudClosingStatusSelect.innerHTML = '<option value="">All Status</option>';
                 options.closing_statuses.forEach(status => {
                     const option = document.createElement('option');
                     option.value = status;
                     option.textContent = status;
+                    if (status === currentStatus) option.selected = true;
                     fraudClosingStatusSelect.appendChild(option);
                 });
             }
@@ -2922,16 +3082,23 @@ async function populateFraudFilterDropdowns() {
             // Populate DPD buckets dropdown
             const fraudDpdBucketSelect = document.getElementById('fraudDpdBucket');
             if (fraudDpdBucketSelect && options.dpd_buckets) {
+                const currentDpd = fraudDpdBucketSelect.value;
                 fraudDpdBucketSelect.innerHTML = '<option value="">All DPD</option>';
                 options.dpd_buckets.forEach(bucket => {
                     const option = document.createElement('option');
                     option.value = bucket;
                     option.textContent = bucket;
+                    if (bucket === currentDpd) option.selected = true;
                     fraudDpdBucketSelect.appendChild(option);
                 });
             }
             
-            console.log('Fraud filter dropdowns populated successfully');
+            console.log('Fraud filter dropdowns populated successfully with filtered data:', {
+                states: options.states.length,
+                cities: fraudCitySelect?.options.length || 0,
+                closing_statuses: options.closing_statuses.length,
+                dpd_buckets: options.dpd_buckets.length
+            });
         }
     } catch (error) {
         console.error('Error populating fraud filter dropdowns:', error);
