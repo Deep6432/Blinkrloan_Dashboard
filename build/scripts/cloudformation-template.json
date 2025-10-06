@@ -1,0 +1,372 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AWS CloudFormation template for Blinkr Collection Dashboard",
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "production",
+      "AllowedValues": ["development", "staging", "production"],
+      "Description": "Environment name"
+    },
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "VPC ID where resources will be created"
+    },
+    "SubnetIds": {
+      "Type": "CommaDelimitedList",
+      "Description": "Subnet IDs for ECS tasks"
+    },
+    "DatabasePassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "Description": "Database password"
+    },
+    "SecretKey": {
+      "Type": "String",
+      "NoEcho": true,
+      "Description": "Django secret key"
+    }
+  },
+  "Resources": {
+    "ECSCluster": {
+      "Type": "AWS::ECS::Cluster",
+      "Properties": {
+        "ClusterName": "blinkr-cluster",
+        "CapacityProviders": ["FARGATE"],
+        "DefaultCapacityProviderStrategy": [
+          {
+            "CapacityProvider": "FARGATE",
+            "Weight": 1
+          }
+        ]
+      }
+    },
+    "ECSService": {
+      "Type": "AWS::ECS::Service",
+      "Properties": {
+        "ServiceName": "blinkr-service",
+        "Cluster": {"Ref": "ECSCluster"},
+        "TaskDefinition": {"Ref": "ECSTaskDefinition"},
+        "DesiredCount": 2,
+        "LaunchType": "FARGATE",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "SecurityGroups": [{"Ref": "ECSSecurityGroup"}],
+            "Subnets": {"Ref": "SubnetIds"},
+            "AssignPublicIp": "ENABLED"
+          }
+        },
+        "LoadBalancers": [
+          {
+            "ContainerName": "blinkr-dashboard",
+            "ContainerPort": 8000,
+            "TargetGroupArn": {"Ref": "TargetGroup"}
+          }
+        ]
+      },
+      "DependsOn": ["TargetGroup"]
+    },
+    "ECSTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "blinkr-task",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": ["FARGATE"],
+        "Cpu": "512",
+        "Memory": "1024",
+        "ExecutionRoleArn": {"Ref": "ECSTaskExecutionRole"},
+        "TaskRoleArn": {"Ref": "ECSTaskRole"},
+        "ContainerDefinitions": [
+          {
+            "Name": "blinkr-dashboard",
+            "Image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/blinkr-dashboard:latest",
+            "PortMappings": [
+              {
+                "ContainerPort": 8000,
+                "Protocol": "tcp"
+              }
+            ],
+            "Essential": true,
+            "Environment": [
+              {
+                "Name": "DEBUG",
+                "Value": "False"
+              },
+              {
+                "Name": "DB_HOST",
+                "Value": {"Fn::GetAtt": ["RDSInstance", "Endpoint.Address"]}
+              },
+              {
+                "Name": "DB_NAME",
+                "Value": "blinkr_dashboard"
+              },
+              {
+                "Name": "DB_USER",
+                "Value": "postgres"
+              },
+              {
+                "Name": "REDIS_URL",
+                "Value": {"Fn::GetAtt": ["RedisCluster", "RedisEndpoint.Address"]}
+              }
+            ],
+            "Secrets": [
+              {
+                "Name": "SECRET_KEY",
+                "ValueFrom": {"Ref": "SecretKey"}
+              },
+              {
+                "Name": "DB_PASSWORD",
+                "ValueFrom": {"Ref": "DatabasePassword"}
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {"Ref": "LogGroup"},
+                "awslogs-region": {"Ref": "AWS::Region"},
+                "awslogs-stream-prefix": "ecs"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ECSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for ECS tasks",
+        "VpcId": {"Ref": "VpcId"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 8000,
+            "ToPort": 8000,
+            "SourceSecurityGroupId": {"Ref": "LoadBalancerSecurityGroup"}
+          }
+        ]
+      }
+    },
+    "LoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for Application Load Balancer",
+        "VpcId": {"Ref": "VpcId"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "ApplicationLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Name": "blinkr-alb",
+        "Scheme": "internet-facing",
+        "Type": "application",
+        "SecurityGroups": [{"Ref": "LoadBalancerSecurityGroup"}],
+        "Subnets": {"Ref": "SubnetIds"}
+      }
+    },
+    "TargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": "blinkr-targets",
+        "Port": 8000,
+        "Protocol": "HTTP",
+        "VpcId": {"Ref": "VpcId"},
+        "TargetType": "ip",
+        "HealthCheckPath": "/health/",
+        "HealthCheckProtocol": "HTTP",
+        "HealthCheckIntervalSeconds": 30,
+        "HealthCheckTimeoutSeconds": 5,
+        "HealthyThresholdCount": 2,
+        "UnhealthyThresholdCount": 3
+      }
+    },
+    "LoadBalancerListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {"Ref": "TargetGroup"}
+          }
+        ],
+        "LoadBalancerArn": {"Ref": "ApplicationLoadBalancer"},
+        "Port": 80,
+        "Protocol": "HTTP"
+      }
+    },
+    "RDSInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBInstanceIdentifier": "blinkr-db",
+        "DBName": "blinkr_dashboard",
+        "DBInstanceClass": "db.t3.micro",
+        "Engine": "postgres",
+        "EngineVersion": "13.7",
+        "MasterUsername": "postgres",
+        "MasterUserPassword": {"Ref": "DatabasePassword"},
+        "AllocatedStorage": 20,
+        "StorageType": "gp2",
+        "VPCSecurityGroups": [{"Ref": "RDSSecurityGroup"}],
+        "DBSubnetGroupName": {"Ref": "DBSubnetGroup"},
+        "BackupRetentionPeriod": 7,
+        "MultiAZ": false,
+        "PubliclyAccessible": false
+      }
+    },
+    "RDSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for RDS instance",
+        "VpcId": {"Ref": "VpcId"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "SourceSecurityGroupId": {"Ref": "ECSSecurityGroup"}
+          }
+        ]
+      }
+    },
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet group for RDS instance",
+        "SubnetIds": {"Ref": "SubnetIds"}
+      }
+    },
+    "RedisCluster": {
+      "Type": "AWS::ElastiCache::ReplicationGroup",
+      "Properties": {
+        "ReplicationGroupId": "blinkr-redis",
+        "Description": "Redis cluster for caching",
+        "NodeType": "cache.t3.micro",
+        "Port": 6379,
+        "NumCacheClusters": 1,
+        "Engine": "redis",
+        "CacheSubnetGroupName": {"Ref": "CacheSubnetGroup"},
+        "SecurityGroupIds": [{"Ref": "RedisSecurityGroup"}]
+      }
+    },
+    "RedisSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for Redis cluster",
+        "VpcId": {"Ref": "VpcId"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 6379,
+            "ToPort": 6379,
+            "SourceSecurityGroupId": {"Ref": "ECSSecurityGroup"}
+          }
+        ]
+      }
+    },
+    "CacheSubnetGroup": {
+      "Type": "AWS::ElastiCache::SubnetGroup",
+      "Properties": {
+        "Description": "Subnet group for Redis cluster",
+        "SubnetIds": {"Ref": "SubnetIds"}
+      }
+    },
+    "LogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/ecs/blinkr-dashboard",
+        "RetentionInDays": 30
+      }
+    },
+    "ECSTaskExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        ]
+      }
+    },
+    "ECSTaskRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ECSTaskPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "LoadBalancerDNS": {
+      "Description": "DNS name of the load balancer",
+      "Value": {"Fn::GetAtt": ["ApplicationLoadBalancer", "DNSName"]},
+      "Export": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-LoadBalancerDNS"}
+      }
+    },
+    "DatabaseEndpoint": {
+      "Description": "RDS instance endpoint",
+      "Value": {"Fn::GetAtt": ["RDSInstance", "Endpoint.Address"]},
+      "Export": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-DatabaseEndpoint"}
+      }
+    },
+    "RedisEndpoint": {
+      "Description": "Redis cluster endpoint",
+      "Value": {"Fn::GetAtt": ["RedisCluster", "RedisEndpoint.Address"]},
+      "Export": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-RedisEndpoint"}
+      }
+    }
+  }
+}

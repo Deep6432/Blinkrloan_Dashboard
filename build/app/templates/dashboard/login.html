@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Login - BlinkR Collection Dashboard{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div class="max-w-md w-full space-y-8 p-8">
+        <!-- Logo and Header -->
+        <div class="text-center">
+            <div class="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-blue-500/20 mb-4">
+                <img src="{% static 'images/blinkr-logo.svg' %}" alt="BlinkR Logo" class="h-10 w-10">
+            </div>
+            <h2 class="text-3xl font-bold text-white mb-2">Welcome Back</h2>
+            <p class="text-gray-400">Sign in to access the BlinkR Collection Dashboard</p>
+        </div>
+
+        <!-- Login Form -->
+        <div class="bg-slate-800/50 backdrop-blur-sm rounded-xl p-8 border border-slate-700/50 shadow-2xl">
+            <!-- Messages -->
+            {% if messages %}
+                <div class="mb-6">
+                    {% for message in messages %}
+                        <div class="p-4 rounded-lg {% if message.tags == 'error' %}bg-red-500/20 border border-red-500/30 text-red-300{% elif message.tags == 'success' %}bg-green-500/20 border border-green-500/30 text-green-300{% else %}bg-blue-500/20 border border-blue-500/30 text-blue-300{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'dashboard:login' %}" class="space-y-6" id="loginForm">
+                {% csrf_token %}
+                
+                <!-- Username Field -->
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-300 mb-2">
+                        Username
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                        <input 
+                            id="username" 
+                            name="username" 
+                            type="text" 
+                            required 
+                            class="block w-full pl-10 pr-3 py-3 border border-gray-600 rounded-lg bg-slate-700/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                            placeholder="Enter your username"
+                            autocomplete="username"
+                        >
+                    </div>
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-300 mb-2">
+                        Password
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                        </div>
+                        <input 
+                            id="password" 
+                            name="password" 
+                            type="password" 
+                            required 
+                            class="block w-full pl-10 pr-3 py-3 border border-gray-600 rounded-lg bg-slate-700/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                        >
+                    </div>
+                </div>
+
+                <!-- Login Button -->
+                <div>
+                    <button 
+                        type="submit" 
+                        class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                    >
+                        <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+                            <svg class="h-5 w-5 text-blue-300 group-hover:text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                            </svg>
+                        </span>
+                        Sign In
+                    </button>
+                </div>
+            </form>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-sm text-gray-500">
+            <p>&copy; 2024 BlinkR Loan. All rights reserved.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom animations */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .bg-slate-800\/50 {
+        animation: fadeInUp 0.6s ease-out;
+    }
+
+    /* Focus states */
+    input:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Button hover effects */
+    button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+    }
+</style>
+
+<script>
+// Ensure CSRF token is properly handled
+document.addEventListener('DOMContentLoaded', function() {
+    // Get CSRF token from cookies
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Set CSRF token for AJAX requests
+    const csrftoken = getCookie('csrftoken');
+    if (csrftoken) {
+        // Set default headers for fetch requests
+        fetch.defaults = fetch.defaults || {};
+        fetch.defaults.headers = fetch.defaults.headers || {};
+        fetch.defaults.headers['X-CSRFToken'] = csrftoken;
+    }
+    
+    // Check if user is already logged in and redirect (only once)
+    if (!sessionStorage.getItem('loginCheckDone')) {
+        fetch('/api/kpi-data/', {
+            method: 'GET',
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (response.ok) {
+                // User is already authenticated, redirect to dashboard
+                window.location.href = '/dashboard/';
+            }
+            // Mark check as done to prevent infinite loops
+            sessionStorage.setItem('loginCheckDone', 'true');
+        })
+        .catch(() => {
+            // User is not authenticated, mark check as done
+            sessionStorage.setItem('loginCheckDone', 'true');
+        });
+    }
+    
+    // Handle form submission
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(this);
+            const username = formData.get('username');
+            const password = formData.get('password');
+            
+            // Validate inputs
+            if (!username || !password) {
+                alert('Please fill in all fields.');
+                return;
+            }
+            
+            // Get CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            // Show loading state
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.textContent = 'Signing In...';
+            submitButton.disabled = true;
+            
+            // Try AJAX first, fallback to form submission
+            const tryAjax = () => {
+                return fetch(this.action || window.location.href, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(formData)
+                });
+            };
+            
+            const tryFormSubmit = () => {
+                // Create a temporary form and submit it
+                const tempForm = document.createElement('form');
+                tempForm.method = 'POST';
+                tempForm.action = this.action || window.location.href;
+                tempForm.style.display = 'none';
+                
+                // Add all form fields
+                for (const [key, value] of formData.entries()) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    tempForm.appendChild(input);
+                }
+                
+                // Clear login check flag before form submission
+                sessionStorage.removeItem('loginCheckDone');
+                document.body.appendChild(tempForm);
+                tempForm.submit();
+            };
+            
+            // Try AJAX first
+            tryAjax()
+            .then(response => {
+                console.log('Login response:', response.status, response.statusText);
+                if (response.ok) {
+                    // Parse JSON response
+                    return response.json().then(data => {
+                        console.log('Login data:', data);
+                        if (data.success) {
+                            // Success - clear login check flag and redirect to dashboard
+                            console.log('Login successful, redirecting to:', data.redirect_url || '/dashboard/');
+                            sessionStorage.removeItem('loginCheckDone');
+                            window.location.href = data.redirect_url || '/dashboard/';
+                        } else {
+                            // Login failed
+                            alert('Login failed. Please check your credentials.');
+                            submitButton.textContent = originalText;
+                            submitButton.disabled = false;
+                        }
+                    }).catch(error => {
+                        console.error('JSON parse error:', error);
+                        // Fallback: try form submission
+                        console.log('Falling back to form submission');
+                        tryFormSubmit();
+                    });
+                } else if (response.status === 403) {
+                    // CSRF error - refresh page and try again
+                    alert('Session expired. Please refresh the page and try again.');
+                    window.location.reload();
+                } else {
+                    // Other error - try form submission
+                    console.log('AJAX failed, trying form submission');
+                    tryFormSubmit();
+                }
+            })
+            .catch(error => {
+                console.error('AJAX error:', error);
+                // Fallback to form submission
+                console.log('AJAX failed, falling back to form submission');
+                tryFormSubmit();
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
