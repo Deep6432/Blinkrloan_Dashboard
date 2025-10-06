@@ -1261,7 +1261,7 @@ def apply_date_filter(queryset, request):
 
 # Helper function to apply filters to fraud records
 def normalize_city_name(city_name):
-    """Normalize city names - group all Delhi and Mumbai districts under their respective main cities"""
+    """Normalize city names - group all Delhi, Mumbai, and Hyderabad districts under their respective main cities"""
     if not city_name:
         return city_name
     
@@ -1274,6 +1274,10 @@ def normalize_city_name(city_name):
     # Check if city contains Mumbai (case insensitive)
     if 'mumbai' in city_name.lower():
         return 'Mumbai'
+    
+    # Check if city contains Hyderabad districts (case insensitive)
+    if 'medchal' in city_name.lower() or 'malkajgiri' in city_name.lower():
+        return 'Hyderabad'
     
     return city_name
 
