@@ -984,7 +984,7 @@ if (window.history.replaceState) {
         }
     }
     
-    // Toggle fraud filters visibility 
+    // Toggle fraud filters visibility
     // just for git push 3
     function toggleFraudFilters() {
         const filterContent = document.getElementById('fraudFilterContent');
@@ -2109,21 +2109,21 @@ function setupAutoFilters() {
                 if (formId === 'fraudFilterForm') {
                     // For fraud tab, use the fraud-specific filter update function
                     updateFraudFilterOptions(form).then(() => {
-                        // Only submit if both dates are provided or both are empty
-                        if ((dateFrom && dateTo) || (!dateFrom && !dateTo)) {
-                            // Handle fraud tab filters - reload fraud data
-                            applyFraudFilters();
+                // Only submit if both dates are provided or both are empty
+                if ((dateFrom && dateTo) || (!dateFrom && !dateTo)) {
+                        // Handle fraud tab filters - reload fraud data
+                        applyFraudFilters();
                         }
                     });
-                } else {
+                    } else {
                     // For main dashboard, use the regular filter update function
                     updateFilterOptions(form).then(() => {
                         // Only submit if both dates are provided or both are empty
                         if ((dateFrom && dateTo) || (!dateFrom && !dateTo)) {
-                            // Save main filters before submitting
-                            saveMainFilters();
-                        document.getElementById('filterForm').submit();
-                        }
+                        // Save main filters before submitting
+                        saveMainFilters();
+                    document.getElementById('filterForm').submit();
+                    }
                     });
                 }
             } else {
@@ -2380,7 +2380,7 @@ function restoreMainFilters() {
                 // Update city options for the restored state
                 updateCityOptions(filters.state, form).then(() => {
                     // Set city value after cities are loaded
-                    if (filters.city) {
+        if (filters.city) {
                         const citySelect = form.querySelector('select[name="city"]');
                         if (citySelect) citySelect.value = filters.city;
                     }

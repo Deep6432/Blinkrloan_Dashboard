@@ -24,19 +24,33 @@ from .services import DataSyncService
 
 
 def parse_datetime_safely(datetime_str):
-    """Safely parse datetime string and return date object"""
+    """Safely parse datetime string and return date object with timezone conversion from UTC to IST"""
     if not datetime_str:
         return None
     
     try:
         # Handle different datetime formats
         if isinstance(datetime_str, str):
-            # Remove timezone info and parse
-            clean_str = datetime_str.replace('Z', '').replace('+00:00', '')
-            if 'T' in clean_str:
-                return datetime.fromisoformat(clean_str.split('T')[0]).date()
+            # Handle timezone-aware datetime strings
+            if 'T' in datetime_str:
+                # Parse as datetime with timezone info
+                if datetime_str.endswith('Z'):
+                    # UTC timezone
+                    dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                elif '+' in datetime_str or datetime_str.count('-') > 2:
+                    # Has timezone info
+                    dt = datetime.fromisoformat(datetime_str)
+                else:
+                    # No timezone info, assume UTC
+                    dt = datetime.fromisoformat(datetime_str + '+00:00')
+                
+                # Convert UTC to IST (UTC+5:30)
+                ist_offset = timedelta(hours=5, minutes=30)
+                ist_dt = dt + ist_offset
+                return ist_dt.date()
             else:
-                return datetime.strptime(clean_str.split(' ')[0], '%Y-%m-%d').date()
+                # Simple date string, parse as is
+                return datetime.strptime(datetime_str.split(' ')[0], '%Y-%m-%d').date()
         elif hasattr(datetime_str, 'date'):
             return datetime_str.date()
         else:
@@ -406,7 +420,7 @@ def dashboard_view(request):
             'fresh_principal_outstanding': 0,
             'reloan_principal_outstanding': 0
         }
-        
+    
         # Fallback to empty filter options
         unique_states = []
         unique_cities = []
@@ -1073,12 +1087,14 @@ def api_cities_by_state(request):
         # Apply date range filter if provided
         if request.GET.get('date_from') and request.GET.get('date_to'):
             try:
+                # Parse dates as IST dates (user input)
                 date_from = datetime.strptime(request.GET.get('date_from'), '%Y-%m-%d').date()
                 date_to = datetime.strptime(request.GET.get('date_to'), '%Y-%m-%d').date()
                 date_type = request.GET.get('date_type', 'repayment_date')
                 
                 for r in records:
                     if r.get(date_type):
+                        # parse_datetime_safely now converts UTC to IST
                         parsed_date = parse_datetime_safely(r[date_type])
                         if parsed_date and date_from <= parsed_date <= date_to:
                             filtered_records.append(r)
@@ -1353,26 +1369,35 @@ def api_fraud_total_applications_details(request):
 
 # Helper function to apply date filters based on date_type
 def apply_date_filter(queryset, request):
-    """Apply date range filters based on date_type parameter"""
+    """Apply date range filters based on date_type parameter with timezone awareness"""
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     date_type = request.GET.get('date_type', 'repayment_date')
     
     if date_from and date_to:
         try:
+            # Parse dates as IST dates
             date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
             
-            # Filter based on the selected date type with proper date range
+            # Convert IST dates to UTC for database comparison
+            # IST is UTC+5:30, so we need to subtract 5:30 to get UTC
+            ist_offset = timedelta(hours=5, minutes=30)
+            
+            # Convert IST date range to UTC for database filtering
+            date_from_utc = datetime.combine(date_from_obj, datetime.min.time()) - ist_offset
+            date_to_utc = datetime.combine(date_to_obj, datetime.max.time()) - ist_offset
+            
+            # Filter based on the selected date type with proper timezone handling
             if date_type == 'disbursal_date':
                 queryset = queryset.filter(
-                    disbursal_date__gte=date_from_obj,
-                    disbursal_date__lt=date_to_obj + timedelta(days=1)
+                    disbursal_date__gte=date_from_utc.date(),
+                    disbursal_date__lt=date_to_utc.date() + timedelta(days=1)
                 )
             else:  # default to repayment_date
                 queryset = queryset.filter(
-                    repayment_date__gte=date_from_obj,
-                    repayment_date__lt=date_to_obj + timedelta(days=1)
+                    repayment_date__gte=date_from_utc.date(),
+                    repayment_date__lt=date_to_utc.date() + timedelta(days=1)
                 )
         except ValueError:
             pass
@@ -1431,18 +1456,20 @@ def normalize_dpd_bucket(bucket):
     return dpd_bucket_mapping.get(bucket, bucket)
 
 def apply_fraud_filters(records, request):
-    """Apply filters to fraud records based on request parameters"""
+    """Apply filters to fraud records based on request parameters with timezone awareness"""
     if request.GET.get('date_from') and request.GET.get('date_to'):
         try:
+            # Parse dates as IST dates (user input)
             date_from = datetime.strptime(request.GET.get('date_from'), '%Y-%m-%d').date()
             date_to = datetime.strptime(request.GET.get('date_to'), '%Y-%m-%d').date()
             date_type = request.GET.get('date_type', 'repayment_date')
             
-            # Filter based on the selected date type with proper date casting
+            # Filter based on the selected date type with timezone-aware comparison
             if date_type == 'disbursal_date':
                 filtered_records = []
                 for r in records:
                     if r.get('disbursal_date'):
+                        # parse_datetime_safely now converts UTC to IST
                         parsed_date = parse_datetime_safely(r['disbursal_date'])
                         if parsed_date and date_from <= parsed_date <= date_to:
                             filtered_records.append(r)
@@ -1451,6 +1478,7 @@ def apply_fraud_filters(records, request):
                 filtered_records = []
                 for r in records:
                     if r.get('repayment_date'):
+                        # parse_datetime_safely now converts UTC to IST
                         parsed_date = parse_datetime_safely(r['repayment_date'])
                         if parsed_date and date_from <= parsed_date <= date_to:
                             filtered_records.append(r)
