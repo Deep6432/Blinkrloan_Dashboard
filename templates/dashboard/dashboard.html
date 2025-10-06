@@ -3356,8 +3356,11 @@ function loadFraudDpdTable(filters = {}) {
                 const percentage = totalCount > 0 ? (item.count / totalCount) * 100 : 0;
                 const row = document.createElement('tr');
                 
-                // Add styling for table rows
-                row.className = 'border-b border-border/50 hover:bg-secondary/50 transition-colors';
+                // Add styling for table rows with click functionality
+                row.className = 'border-b border-border/50 hover:bg-secondary/50 transition-colors cursor-pointer';
+                
+                // Add click handler to open DPD details modal
+                row.onclick = () => openDPDDetailsModal(item.bucket, item.count);
                 
                 // Format bucket name
                 const bucketName = item.bucket === '0' ? '0 days' : 
