@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/fraud/time-series/', views.api_fraud_time_series, name='api_fraud_time_series'),
     path('api/fraud/city-collected/', views.api_fraud_city_collected, name='api_fraud_city_collected'),
     path('api/fraud/city-uncollected/', views.api_fraud_city_uncollected, name='api_fraud_city_uncollected'),
+    path('api/fraud/total-applications-details/', views.api_fraud_total_applications_details, name='api_fraud_total_applications_details'),
     # Loan Count Wise API endpoints
     path('api/loan-count/kpi-data/', views.api_loan_count_kpi_data, name='api_loan_count_kpi_data'),
     path('api/loan-count/cases/', views.api_loan_count_cases, name='api_loan_count_cases'),

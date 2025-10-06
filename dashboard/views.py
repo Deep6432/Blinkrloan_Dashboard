@@ -1230,6 +1230,126 @@ def api_total_applications_details(request):
             'error': 'Failed to fetch data'
         }, status=500)
 
+@require_http_methods(["GET"])
+def api_fraud_total_applications_details(request):
+    """API endpoint for detailed total applications data in fraud tab - uses external API with fraud filters"""
+    import requests
+    from datetime import datetime
+    
+    search = request.GET.get('search', '')
+    page = int(request.GET.get('page', 1))
+    per_page = int(request.GET.get('per_page', 20))
+    sort_by = request.GET.get('sort_by', 'disbursal_date')
+    sort_order = request.GET.get('sort_order', 'desc')
+    
+    try:
+        # Fetch data from external API (same as api_kpi_data)
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        records = data.get('pr', [])
+        
+        # Apply fraud filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        # Apply search filter
+        if search:
+            filtered_records = [
+                record for record in filtered_records
+                if (search.lower() in (record.get('loan_no', '') or '').lower() or
+                    search.lower() in (record.get('pan', '') or '').lower())
+            ]
+        
+        # Apply sorting
+        if sort_by in filtered_records[0] if filtered_records else False:
+            reverse = sort_order == 'desc'
+            filtered_records.sort(key=lambda x: x.get(sort_by, ''), reverse=reverse)
+        
+        # Calculate totals
+        totals = {
+            'total_loan_amount': sum(safe_decimal_conversion(record.get('loan_amount')) for record in filtered_records),
+            'total_net_disbursal': sum(safe_decimal_conversion(record.get('net_disbursal')) for record in filtered_records),
+            'total_repayment_amount': sum(safe_decimal_conversion(record.get('repayment_amount')) for record in filtered_records),
+            'total_processing_fee': sum(safe_decimal_conversion(record.get('processing_fee')) for record in filtered_records),
+            'total_interest_amount': sum(safe_decimal_conversion(record.get('interest_amount')) for record in filtered_records),
+            'total_received': sum(safe_decimal_conversion(record.get('total_received')) for record in filtered_records)
+        }
+        
+        # Apply pagination
+        total_records = len(filtered_records)
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paginated_records = filtered_records[start_index:end_index]
+        
+        # Format the data
+        formatted_records = []
+        for record in paginated_records:
+            formatted_records.append({
+                'loan_no': record.get('loan_no', '—'),
+                'pan': (record.get('pan', '') or '').upper(),
+                'disbursal_date': parse_datetime_safely(record.get('disbursal_date')).strftime('%d/%m/%Y') if record.get('disbursal_date') else '—',
+                'loan_amount': float(safe_decimal_conversion(record.get('loan_amount'))),
+                'net_disbursal': float(safe_decimal_conversion(record.get('net_disbursal'))),
+                'tenure': record.get('tenure', '—'),
+                'repayment_date': parse_datetime_safely(record.get('repayment_date')).strftime('%d/%m/%Y') if record.get('repayment_date') else '—',
+                'repayment_amount': float(safe_decimal_conversion(record.get('repayment_amount'))),
+                'processing_fee': float(safe_decimal_conversion(record.get('processing_fee'))),
+                'interest_amount': float(safe_decimal_conversion(record.get('interest_amount'))),
+                'last_received_date': parse_datetime_safely(record.get('last_received_date')).strftime('%d/%m/%Y') if record.get('last_received_date') else '—',
+                'total_received': float(safe_decimal_conversion(record.get('total_received'))),
+                'closed_status': record.get('closed_status', '—'),
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_records + per_page - 1) // per_page  # Ceiling division
+        has_next = page < total_pages
+        has_previous = page > 1
+        
+        return JsonResponse({
+            'records': formatted_records,
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_records': total_records,
+                'per_page': per_page,
+                'has_next': has_next,
+                'has_previous': has_previous,
+            },
+            'totals': {
+                'total_loan_amount': float(totals['total_loan_amount']),
+                'total_net_disbursal': float(totals['total_net_disbursal']),
+                'total_repayment_amount': float(totals['total_repayment_amount']),
+                'total_processing_fee': float(totals['total_processing_fee']),
+                'total_interest_amount': float(totals['total_interest_amount']),
+                'total_received': float(totals['total_received']),
+            },
+            'search': search,
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching fraud total applications details: {e}")
+        return JsonResponse({
+            'records': [],
+            'pagination': {
+                'current_page': 1,
+                'total_pages': 0,
+                'total_records': 0,
+                'per_page': per_page,
+                'has_next': False,
+                'has_previous': False,
+            },
+            'totals': {
+                'total_loan_amount': 0,
+                'total_net_disbursal': 0,
+                'total_repayment_amount': 0,
+                'total_processing_fee': 0,
+                'total_interest_amount': 0,
+                'total_received': 0,
+            },
+            'search': search,
+            'error': 'Failed to fetch data'
+        }, status=500)
+
 
 # Helper function to apply date filters based on date_type
 def apply_date_filter(queryset, request):

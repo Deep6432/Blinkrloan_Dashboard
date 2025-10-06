@@ -1659,6 +1659,24 @@ async function exportDPDDetails() {
     }
 }
 
+// Helper function to get the currently active tab
+function getCurrentActiveTab() {
+    const mainTab = document.getElementById('mainTab');
+    const fraudTab = document.getElementById('fraudTab');
+    const loanCountTab = document.getElementById('loanCountTab');
+    
+    if (mainTab && mainTab.classList.contains('active')) {
+        return 'main';
+    } else if (fraudTab && fraudTab.classList.contains('active')) {
+        return 'fraud';
+    } else if (loanCountTab && loanCountTab.classList.contains('active')) {
+        return 'loanCount';
+    }
+    
+    // Default to main tab if none are clearly active
+    return 'main';
+}
+
 // Total Applications Modal Functions
 let currentTotalAppsPage = 1;
 let currentTotalAppsSort = 'disbursal_date';
@@ -1696,8 +1714,22 @@ async function loadTotalApplicationsDetails() {
     document.getElementById('totalAppsTableContainer').classList.add('hidden');
     
     try {
-        // Get current filter values from the form
-        const filterForm = document.getElementById('filterForm');
+        // Determine which tab is active and get the appropriate form and API endpoint
+        const activeTab = getCurrentActiveTab();
+        console.log('Active tab detected:', activeTab);
+        
+        let filterForm, apiEndpoint;
+        
+        if (activeTab === 'fraud') {
+            filterForm = document.getElementById('fraudFilterForm');
+            apiEndpoint = '/api/fraud/total-applications-details/';
+            console.log('Using fraud form and endpoint');
+        } else {
+            filterForm = document.getElementById('filterForm');
+            apiEndpoint = '/api/total-applications-details/';
+            console.log('Using main form and endpoint');
+        }
+        
         const formData = new FormData(filterForm);
         
         const params = new URLSearchParams({
@@ -1717,7 +1749,7 @@ async function loadTotalApplicationsDetails() {
         
         // Add cache-busting parameter
         params.append('_t', Date.now());
-        const response = await fetch(`/api/total-applications-details/?${params}`);
+        const response = await fetch(`${apiEndpoint}?${params}`);
         const data = await response.json();
         
         totalAppsDetailsData = data;
@@ -1857,8 +1889,18 @@ function sortTotalAppsTable(column) {
 
 async function exportTotalApplications() {
     try {
-        // Get current filter values from the form
-        const filterForm = document.getElementById('filterForm');
+        // Determine which tab is active and get the appropriate form and API endpoint
+        const activeTab = getCurrentActiveTab();
+        let filterForm, apiEndpoint;
+        
+        if (activeTab === 'fraud') {
+            filterForm = document.getElementById('fraudFilterForm');
+            apiEndpoint = '/api/fraud/total-applications-details/';
+        } else {
+            filterForm = document.getElementById('filterForm');
+            apiEndpoint = '/api/total-applications-details/';
+        }
+        
         const formData = new FormData(filterForm);
         
         const params = new URLSearchParams({
@@ -1877,7 +1919,7 @@ async function exportTotalApplications() {
         
         // Add cache-busting parameter
         params.append('_t', Date.now());
-        const response = await fetch(`/api/total-applications-details/?${params}`);
+        const response = await fetch(`${apiEndpoint}?${params}`);
         const data = await response.json();
         
         if (!data.records || data.records.length === 0) {
