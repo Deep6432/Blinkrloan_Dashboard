@@ -285,7 +285,7 @@ if (window.history.replaceState) {
 
         <!-- Mobile Responsive KPI Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-            <div class="kpi-card cursor-pointer hover:bg-secondary/20 transition-colors" onclick="openTotalApplicationsModal({{ kpis.total_applications|floatformat:0 }})">
+            <div class="kpi-card cursor-pointer hover:bg-secondary/20 transition-colors" onclick="openTotalApplicationsModal()">
                 <div class="flex items-center gap-2 mb-2">
                     <div class="p-1.5 rounded-md bg-blue-500/10 border border-blue-500/20">
                         <svg class="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -606,8 +606,6 @@ if (window.history.replaceState) {
                         <tr class="border-b border-border">
                             <th class="text-left py-3 px-4 font-medium text-muted-foreground">DPD Bucket</th>
                             <th class="text-right py-3 px-4 font-medium text-muted-foreground">Loans (#)</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Total Net Disbursal (₹)</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Total Due (₹)</th>
                         </tr>
                     </thead>
                     <tbody id="dpdTableBody">
@@ -2781,8 +2779,6 @@ async function loadDPDBucketData() {
             row.innerHTML = `
                 <td class="py-3 px-4 font-medium ${item.is_selected ? 'text-blue-400' : ''}">${item.dpd_bucket} days</td>
                 <td class="py-3 px-4 text-right ${item.is_selected ? 'text-blue-400 font-semibold' : ''}">${formatNumber(item.count)}</td>
-                <td class="py-3 px-4 text-right ${item.is_selected ? 'text-blue-400 font-semibold' : ''}">${formatCurrency(item.total_net_disbursal)}</td>
-                <td class="py-3 px-4 text-right ${item.is_selected ? 'text-blue-400 font-semibold' : ''}">${formatCurrency(item.total_repayment_amount)}</td>
             `;
             
             tbody.appendChild(row);
@@ -3371,8 +3367,6 @@ function loadFraudDpdTable(filters = {}) {
                 row.innerHTML = `
                     <td class="py-3 px-4 font-medium">${bucketName}</td>
                     <td class="py-3 px-4 text-right">${formatNumber(item.count)}</td>
-                    <td class="py-3 px-4 text-right">${formatCurrency(item.total_disbursal)}</td>
-                    <td class="py-3 px-4 text-right">${formatCurrency(item.total_due)}</td>
                 `;
                 
                 tbody.appendChild(row);
@@ -4222,8 +4216,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             <tr>
                                 <th class="text-left py-3 px-4 font-medium text-muted-foreground">DPD Bucket</th>
                                 <th class="text-right py-3 px-4 font-medium text-muted-foreground">Loans (#)</th>
-                                <th class="text-right py-3 px-4 font-medium text-muted-foreground">Total Net Disbursal (₹)</th>
-                                <th class="text-right py-3 px-4 font-medium text-muted-foreground">Total Due (₹)</th>
                             </tr>
                         </thead>
                         <tbody id="fraudDpdTableBody">
