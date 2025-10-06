@@ -1,0 +1,61 @@
+# Production requirements for Blinkr Collection Dashboard
+
+# Core Django
+Django==4.2.7
+djangorestframework==3.14.0
+
+# Database
+psycopg2-binary==2.9.7
+
+# Production server
+gunicorn==21.2.0
+
+# Static files
+whitenoise==6.6.0
+
+# CORS handling
+django-cors-headers==4.3.1
+
+# HTTP requests
+requests==2.31.0
+
+# Image processing
+Pillow==10.1.0
+
+# Date/time utilities
+python-dateutil==2.8.2
+pytz==2025.2
+
+# Security
+cryptography==41.0.7
+
+# Monitoring and logging
+sentry-sdk==1.38.0
+
+# Cache backend
+redis==5.0.1
+django-redis==5.4.0
+
+# Environment variables
+python-decouple==3.8
+
+# Health checks
+django-health-check==3.17.0
+
+# Production utilities
+django-extensions==3.2.3
+
+# SSL/TLS
+certifi==2025.8.3
+
+# Character encoding
+charset-normalizer==3.4.3
+
+# URL parsing
+urllib3==2.5.0
+
+# Data validation
+six==1.17.0
+
+# Type hints
+typing-extensions==4.15.0
