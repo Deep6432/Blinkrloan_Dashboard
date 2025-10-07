@@ -440,7 +440,7 @@ if (window.history.replaceState) {
                 </div>
                 <div class="flex items-center justify-between mb-3">
                     <div class="text-3xl font-semibold text-emerald-400" id="collectedAmount" data-amount="{{ kpis.collected_amount }}"></div>
-                    <div class="text-sm text-emerald-300" id="collectedPercentage">{{ kpis.collected_percentage|floatformat:1 }}% of Repayment</div>
+                    <div class="text-sm text-emerald-300" id="collectedPercentage">{{ kpis.collected_percentage|floatformat:2 }}% of Repayment</div>
                 </div>
                 <div class="space-y-2">
                     <div class="flex items-center justify-between text-sm">
@@ -476,7 +476,7 @@ if (window.history.replaceState) {
                 </div>
                 <div class="flex items-center justify-between mb-3">
                     <div class="text-3xl font-semibold text-red-400" id="pendingAmount" data-amount="{{ kpis.pending_collection }}"></div>
-                    <div class="text-sm text-red-300" id="pendingPercentage">{{ kpis.pending_percentage|floatformat:1 }}% of Repayment</div>
+                    <div class="text-sm text-red-300" id="pendingPercentage">{{ kpis.pending_percentage|floatformat:2 }}% of Repayment</div>
                 </div>
                 <div class="space-y-2">
                     <div class="flex items-center justify-between text-sm">
@@ -566,7 +566,7 @@ if (window.history.replaceState) {
                 </div>
             </div>
 
-            <!-- Enhanced Time Series Chart -->
+            <!-- Enhanced Time Series Chart -----> 
             <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl">
                 <div class="flex items-center justify-between mb-8">
                     <div class="flex items-center gap-4">
@@ -2692,7 +2692,7 @@ async function refreshKPIData(params) {
             // Update Collected Percentage
             const collectedPercentageElement = document.getElementById('collectedPercentage');
             if (collectedPercentageElement) {
-                collectedPercentageElement.textContent = kpis.collected_percentage.toFixed(1) + '% of Repayment';
+                collectedPercentageElement.textContent = kpis.collected_percentage.toFixed(2) + '% of Repayment';
             }
             
             // Update Fresh Collected Amount
@@ -2716,7 +2716,7 @@ async function refreshKPIData(params) {
             // Update Pending Percentage
             const pendingPercentageElement = document.getElementById('pendingPercentage');
             if (pendingPercentageElement) {
-                pendingPercentageElement.textContent = kpis.pending_percentage.toFixed(1) + '% of Repayment';
+                pendingPercentageElement.textContent = kpis.pending_percentage.toFixed(2) + '% of Repayment';
             }
             
             // Update Fresh Pending Amount
