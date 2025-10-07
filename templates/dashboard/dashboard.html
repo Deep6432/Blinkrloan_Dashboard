@@ -987,9 +987,11 @@ if (window.history.replaceState) {
         if (filterContent.classList.contains('hidden')) {
             filterContent.classList.remove('hidden');
             toggleIcon.style.transform = 'rotate(180deg)';
+            localStorage.setItem('mainFiltersExpanded', 'true');
         } else {
             filterContent.classList.add('hidden');
             toggleIcon.style.transform = 'rotate(0deg)';
+            localStorage.setItem('mainFiltersExpanded', 'false');
         }
     }
     
@@ -1972,10 +1974,31 @@ async function exportTotalApplications() {
     }
 }
 
+// Restore filter section state from localStorage
+function restoreFilterSectionState() {
+    const isExpanded = localStorage.getItem('mainFiltersExpanded');
+    const filterContent = document.getElementById('filterContent');
+    const toggleIcon = document.getElementById('filterToggleIcon');
+    
+    if (filterContent && toggleIcon) {
+        // Default to expanded if not set, or if explicitly set to true
+        if (isExpanded === null || isExpanded === 'true') {
+            filterContent.classList.remove('hidden');
+            toggleIcon.style.transform = 'rotate(180deg)';
+        } else {
+            filterContent.classList.add('hidden');
+            toggleIcon.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
 // Load charts when page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Format all currency values
     formatAllCurrencyValues();
+    
+    // Restore filter section expanded/collapsed state
+    restoreFilterSectionState();
     
     // Restore main dashboard filters from localStorage FIRST
     restoreMainFilters();
