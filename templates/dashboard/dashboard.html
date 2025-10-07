@@ -3381,8 +3381,8 @@ function loadFraudKpiData(filters = {}) {
             // Update percentages
             const collectionRate = data.collection_rate || 0;
             const pendingRate = 100 - collectionRate;
-            document.getElementById('fraudCollectedPercentage').textContent = `${collectionRate.toFixed(1)}% of Repayment`;
-            document.getElementById('fraudPendingPercentage').textContent = `${pendingRate.toFixed(1)}% of Repayment`;
+            document.getElementById('fraudCollectedPercentage').textContent = `${collectionRate.toFixed(2)}% of Repayment`;
+            document.getElementById('fraudPendingPercentage').textContent = `${pendingRate.toFixed(2)}% of Repayment`;
         })
         .catch(error => {
             console.error('Error loading fraud KPI data:', error);
