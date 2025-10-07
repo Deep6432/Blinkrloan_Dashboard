@@ -263,9 +263,9 @@ def get_kpi_data(queryset):
     collected_amount = actual_repayment_amount
     pending_collection = repayment_amount - collected_amount
 
-    # Percentages
-    collected_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
-    pending_percentage = ((repayment_amount - collected_amount) / repayment_amount * 100) if repayment_amount > 0 else 0
+    # Percentages (rounded to 2 decimal places)
+    collected_percentage = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
+    pending_percentage = round(((repayment_amount - collected_amount) / repayment_amount * 100), 2) if repayment_amount > 0 else 0
 
     # Calculate fresh and reloan pending amounts
     fresh_pending_amount = (fresh_amounts['fresh_repayment'] or 0) - (fresh_amounts['fresh_collected'] or 0)
@@ -520,9 +520,9 @@ def calculate_kpis(queryset):
     collected_amount = actual_repayment_amount
     pending_collection = repayment_amount - collected_amount
     
-    # Percentages
-    collected_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
-    pending_percentage = ((repayment_amount - collected_amount) / repayment_amount * 100) if repayment_amount > 0 else 0
+    # Percentages (rounded to 2 decimal places)
+    collected_percentage = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
+    pending_percentage = round(((repayment_amount - collected_amount) / repayment_amount * 100), 2) if repayment_amount > 0 else 0
     
     return {
         'total_applications': total_applications,
@@ -1613,7 +1613,7 @@ def api_fraud_kpi_data(request):
         penalty = Decimal('0')  # Assuming no penalty data in this API
         collected_amount = total_received
         pending_collection = repayment_amount - collected_amount
-        collection_rate = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
+        collection_rate = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
         
         return JsonResponse({
             'total_applications': total_applications,
