@@ -131,24 +131,16 @@ def calculate_kpi_from_records(records):
     fresh_pending_amount = fresh_repayment_amount - fresh_collected_amount
     reloan_pending_amount = reloan_repayment_amount - reloan_collected_amount
     
-    # Calculate principal outstanding (net_disbursal for records with no collections)
-    principal_outstanding = sum(
-        safe_decimal_conversion(record.get('net_disbursal')) 
-        for record in records 
-        if not record.get('last_received_date') and safe_decimal_conversion(record.get('total_received')) == 0
-    )
+    # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+    not_closed_records = [r for r in records if r.get('closed_status') == 'Not Closed']
+    not_closed_fresh_records = [r for r in fresh_records if r.get('closed_status') == 'Not Closed']
+    not_closed_reloan_records = [r for r in reloan_records if r.get('closed_status') == 'Not Closed']
     
-    fresh_principal_outstanding = sum(
-        safe_decimal_conversion(record.get('net_disbursal')) 
-        for record in fresh_records 
-        if not record.get('last_received_date') and safe_decimal_conversion(record.get('total_received')) == 0
-    )
+    principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_records)
     
-    reloan_principal_outstanding = sum(
-        safe_decimal_conversion(record.get('net_disbursal')) 
-        for record in reloan_records 
-        if not record.get('last_received_date') and safe_decimal_conversion(record.get('total_received')) == 0
-    )
+    fresh_principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_fresh_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_fresh_records)
+    
+    reloan_principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_reloan_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_reloan_records)
     
     # Calculate percentages
     fresh_percentage = round((fresh_cases / total_applications) * 100, 2) if total_applications > 0 else 0
@@ -279,23 +271,27 @@ def get_kpi_data(queryset):
     fresh_pending_amount = (fresh_amounts['fresh_repayment'] or 0) - (fresh_amounts['fresh_collected'] or 0)
     reloan_pending_amount = (reloan_amounts['reloan_repayment'] or 0) - (reloan_amounts['reloan_collected'] or 0)
     
-    # Calculate principal outstanding (net_disbursal for records with no collections)
-    principal_outstanding_queryset = queryset.filter(
-        last_received_date__isnull=True,
-        total_received=0
+    # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+    not_closed_queryset = queryset.filter(closed_status='Not Closed')
+    
+    not_closed_totals = not_closed_queryset.aggregate(
+        total_disbursal=Sum('net_disbursal'),
+        total_received=Sum('total_received')
     )
-    principal_outstanding_amount = principal_outstanding_queryset.aggregate(
-        total=Sum('net_disbursal')
-    )['total'] or Decimal('0')
+    principal_outstanding_amount = (not_closed_totals['total_disbursal'] or Decimal('0')) - (not_closed_totals['total_received'] or Decimal('0'))
     
-    # Calculate fresh and reloan principal outstanding amounts
-    fresh_principal_outstanding = principal_outstanding_queryset.filter(reloan_status='Freash').aggregate(
-        total=Sum('net_disbursal')
-    )['total'] or Decimal('0')
+    # Calculate fresh and reloan principal outstanding amounts (only Not Closed records)
+    fresh_not_closed = not_closed_queryset.filter(reloan_status='Freash').aggregate(
+        total_disbursal=Sum('net_disbursal'),
+        total_received=Sum('total_received')
+    )
+    fresh_principal_outstanding = (fresh_not_closed['total_disbursal'] or Decimal('0')) - (fresh_not_closed['total_received'] or Decimal('0'))
     
-    reloan_principal_outstanding = principal_outstanding_queryset.filter(reloan_status='Reloan').aggregate(
-        total=Sum('net_disbursal')
-    )['total'] or Decimal('0')
+    reloan_not_closed = not_closed_queryset.filter(reloan_status='Reloan').aggregate(
+        total_disbursal=Sum('net_disbursal'),
+        total_received=Sum('total_received')
+    )
+    reloan_principal_outstanding = (reloan_not_closed['total_disbursal'] or Decimal('0')) - (reloan_not_closed['total_received'] or Decimal('0'))
 
     return {
         'total_applications': total_applications,
@@ -1596,17 +1592,6 @@ def api_fraud_kpi_data(request):
         fresh_pending_amount = fresh_repayment_amount - fresh_collected_amount
         reloan_pending_amount = reloan_repayment_amount - reloan_collected_amount
         
-        # Calculate principal outstanding (records with no collections)
-        principal_outstanding_records = [record for record in records 
-                                       if record.get('last_received_date') is None and 
-                                       Decimal(str(record.get('total_received', 0))) == 0]
-        
-        principal_outstanding_amount = sum(Decimal(str(record.get('net_disbursal', 0))) for record in principal_outstanding_records)
-        fresh_principal_outstanding = sum(Decimal(str(record.get('net_disbursal', 0))) for record in principal_outstanding_records 
-                                        if record.get('reloan_status') == 'Freash')
-        reloan_principal_outstanding = sum(Decimal(str(record.get('net_disbursal', 0))) for record in principal_outstanding_records 
-                                         if record.get('reloan_status') == 'Reloan')
-        
         # Calculate total amounts
         sanction_amount = sum(Decimal(str(record.get('loan_amount', 0))) for record in records)
         disbursed_amount = sum(Decimal(str(record.get('net_disbursal', 0))) for record in records)
@@ -1614,6 +1599,15 @@ def api_fraud_kpi_data(request):
         processing_fee = sum(Decimal(str(record.get('processing_fee', 0))) for record in records)
         interest_amount = sum(Decimal(str(record.get('interest_amount', 0))) for record in records)
         total_received = sum(Decimal(str(record.get('total_received', 0))) for record in records)
+        
+        # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+        not_closed_records = [r for r in records if r.get('closed_status') == 'Not Closed']
+        not_closed_fresh_records = [r for r in fresh_records if r.get('closed_status') == 'Not Closed']
+        not_closed_reloan_records = [r for r in reloan_records if r.get('closed_status') == 'Not Closed']
+        
+        principal_outstanding_amount = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_records)
+        fresh_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_fresh_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_fresh_records)
+        reloan_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_reloan_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_reloan_records)
         
         earning = processing_fee + interest_amount
         penalty = Decimal('0')  # Assuming no penalty data in this API
