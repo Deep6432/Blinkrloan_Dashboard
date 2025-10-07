@@ -160,6 +160,15 @@ if (window.history.replaceState) {
                         <span class="sm:hidden">Loan Count</span>
                     </div>
                 </button>
+                <button id="dailyPerformanceTab" onclick="switchTab('dailyPerformance')" class="flex-1 px-1 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded-md transition-colors tab-button">
+                    <div class="flex items-center justify-center gap-1 sm:gap-2">
+                        <svg class="h-3 w-3 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <span class="hidden sm:inline">Daily Performance Metrics</span>
+                        <span class="sm:hidden">Daily Perf</span>
+                    </div>
+                </button>
             </div>
         </div>
 
@@ -4360,6 +4369,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         </div> <!-- End Loan Count Wise Tab -->
+
+        <!-- Daily Performance Metrics Tab -->
+        <div id="dailyPerformanceContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
+            <div class="card">
+                <div class="p-6 text-center">
+                    <h2 class="text-xl font-semibold text-white mb-4">Daily Performance Metrics</h2>
+                    <p class="text-gray-400 mb-6">Comprehensive daily performance tracking and analytics</p>
+                    <div class="text-sm text-gray-500">Coming Soon - Advanced daily performance monitoring and insights</div>
+                </div>
+            </div>
+        </div> <!-- End Daily Performance Metrics Tab -->
 
     </div>
 </div>
