@@ -54,9 +54,10 @@ SECURE_HSTS_PRELOAD = True
 # SESSION_COOKIE_SECURE = True
 # CSRF_COOKIE_SECURE = True
 
-# Session settings for production
-SESSION_COOKIE_AGE = 3600  # 1 hour
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# Session settings for production - Keep user logged in for 5 days
+SESSION_COOKIE_AGE = 432000  # 5 days in seconds (5 * 24 * 60 * 60)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Don't expire when browser closes
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on every request
 SESSION_COOKIE_SECURE = False  # Set to True when using HTTPS
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
