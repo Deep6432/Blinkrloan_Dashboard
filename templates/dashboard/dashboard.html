@@ -3565,7 +3565,7 @@ async function updateFraudFilterOptions(form) {
         if (dpd) params.append('dpd', dpd);
         
         console.log('Fetching fraud filter options with params:', params.toString());
-        const response = await fetch(`/api/kpi-data/?${params.toString()}`);
+        const response = await fetch(`/api/fraud/kpi-data/?${params.toString()}`);
         const data = await response.json();
         
         console.log('Received fraud filter options:', data.filter_options);
@@ -3676,8 +3676,8 @@ async function populateFraudFilterDropdowns() {
         if (closingStatus) params.append('closing_status', closingStatus);
         if (dpd) params.append('dpd', dpd);
         
-        // Fetch filter options from the main API with current filters
-        const response = await fetch(`/api/kpi-data/?${params.toString()}`);
+        // Fetch filter options from the fraud API with current filters
+        const response = await fetch(`/api/fraud/kpi-data/?${params.toString()}`);
         const data = await response.json();
         
         if (data && data.filter_options) {

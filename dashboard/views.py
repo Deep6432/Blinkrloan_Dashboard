@@ -1624,6 +1624,18 @@ def api_fraud_kpi_data(request):
         pending_collection = repayment_amount - collected_amount
         collection_rate = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
         
+        # Extract filter options from filtered records
+        unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '') for record in records if record.get('city'))))
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
+        unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
+        
+        # Get unique DPD buckets and normalize them from filtered records
+        all_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in records if record.get('dpd_bucket')))
+        normalized_dpd_buckets = [normalize_dpd_bucket(bucket) for bucket in all_dpd_buckets if bucket]
+        bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'DPD 121-150', 'DPD 151-180', 'DPD 181-365', 'DPD 365+', 'No DPD']
+        unique_dpd_buckets = [bucket for bucket in bucket_order if bucket in normalized_dpd_buckets]
+        
         return JsonResponse({
             'total_applications': total_applications,
             'fresh_cases': fresh_cases,
@@ -1650,7 +1662,13 @@ def api_fraud_kpi_data(request):
             'penalty': float(penalty),
             'collected_amount': float(collected_amount),
             'pending_collection': float(pending_collection),
-            'collection_rate': float(collection_rate)
+            'collection_rate': float(collection_rate),
+            'filter_options': {
+                'states': unique_states,
+                'cities': unique_cities,
+                'closing_statuses': unique_closed_statuses,
+                'dpd_buckets': unique_dpd_buckets
+            }
         })
         
     except Exception as e:
