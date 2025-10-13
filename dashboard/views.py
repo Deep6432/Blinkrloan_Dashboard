@@ -613,21 +613,49 @@ def api_dpd_buckets(request):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_state_repayment(request):
-    """API endpoint for state-wise repayment data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    # Group by state
-    state_data = queryset.values('state').annotate(
-        repayment_amount=Sum('total_received')
-    ).order_by('-repayment_amount')
-    
-    return JsonResponse({
-        'data': list(state_data)
-    })
+    """API endpoint for state-wise repayment data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Group by state and calculate repayment amount
+        state_data = {}
+        for record in filtered_records:
+            state = record.get('state', 'Unknown')
+            if state not in state_data:
+                state_data[state] = Decimal('0')
+            
+            state_data[state] += Decimal(str(record.get('total_received', 0)))
+        
+        # Convert to list and format
+        result = [
+            {
+                'state': state,
+                'repayment_amount': float(amount)
+            }
+            for state, amount in state_data.items()
+        ]
+        
+        # Sort by repayment amount (highest first)
+        result.sort(key=lambda x: x['repayment_amount'], reverse=True)
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -673,160 +701,131 @@ def api_kpi_data(request):
         return JsonResponse({'error': 'Failed to fetch data'}, status=500)
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_city_collected(request):
-    """API endpoint for top 10 cities by collection percentage"""
-    queryset = LoanRecord.objects.all()
-
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for top 10 cities by collection percentage from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-
-    # Group by city and calculate collection metrics
-    city_data = queryset.values('city').annotate(
-        collected_amount=Sum('total_received'),
-        repayment_amount=Sum('repayment_amount'),
-        total_applications=Count('id')
-    )
-
-    # Group data by normalized city names
-    normalized_city_data = {}
-    for item in city_data:
-        normalized_city = normalize_city_name(item['city'])
+        # Extract the data array
+        records = data.get('pr', [])
         
-        if normalized_city not in normalized_city_data:
-            normalized_city_data[normalized_city] = {
-                'city': normalized_city,
-                'collected_amount': 0,
-                'repayment_amount': 0,
-                'total_applications': 0
-            }
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
         
-        normalized_city_data[normalized_city]['collected_amount'] += item['collected_amount'] or 0
-        normalized_city_data[normalized_city]['repayment_amount'] += item['repayment_amount'] or 0
-        normalized_city_data[normalized_city]['total_applications'] += item['total_applications']
-
-    result = []
-    for city_info in normalized_city_data.values():
-        # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
-        if (city_info['total_applications'] >= 20 and 
-            city_info['repayment_amount'] and 
-            city_info['repayment_amount'] > 0):
-            collection_percentage = (city_info['collected_amount'] / city_info['repayment_amount']) * 100
-
-            result.append({
-                'city': city_info['city'],
-                'collected_amount': float(city_info['collected_amount']),
-                'repayment_amount': float(city_info['repayment_amount']),
-                'collection_percentage': float(collection_percentage),
-                'total_applications': city_info['total_applications']
-            })
-
-    # Sort by collection percentage (highest first) and take top 10
-    result.sort(key=lambda x: x['collection_percentage'], reverse=True)
-    result = result[:10]
-
-    return JsonResponse({
-        'data': result
-    })
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Group by city and calculate collection metrics
+        city_data = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            normalized_city = normalize_city_name(city)
+            
+            if normalized_city not in city_data:
+                city_data[normalized_city] = {
+                    'city': normalized_city,
+                    'collected_amount': Decimal('0'),
+                    'repayment_amount': Decimal('0'),
+                    'total_applications': 0
+                }
+            
+            city_data[normalized_city]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+            city_data[normalized_city]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+            city_data[normalized_city]['total_applications'] += 1
+        
+        # Convert to list and calculate collection percentage
+        result = []
+        for city_info in city_data.values():
+            # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
+            if (city_info['total_applications'] >= 20 and 
+                city_info['repayment_amount'] > 0):
+                collection_percentage = float((city_info['collected_amount'] / city_info['repayment_amount']) * 100)
+                
+                result.append({
+                    'city': city_info['city'],
+                    'collected_amount': float(city_info['collected_amount']),
+                    'repayment_amount': float(city_info['repayment_amount']),
+                    'collection_percentage': collection_percentage,
+                    'total_applications': city_info['total_applications']
+                })
+        
+        # Sort by collection percentage (highest first) and take top 10
+        result.sort(key=lambda x: x['collection_percentage'], reverse=True)
+        result = result[:10]
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_city_uncollected(request):
-    """API endpoint for top 10 cities by collection percentage (worst performers)"""
-    queryset = LoanRecord.objects.all()
-
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for top 10 cities by collection percentage (worst performers) from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-
-    # Group by city and calculate collection metrics
-    city_data = queryset.values('city').annotate(
-        collected_amount=Sum('total_received'),
-        repayment_amount=Sum('repayment_amount'),
-        total_applications=Count('id')
-    )
-
-    # Group data by normalized city names
-    normalized_city_data = {}
-    for item in city_data:
-        normalized_city = normalize_city_name(item['city'])
+        # Extract the data array
+        records = data.get('pr', [])
         
-        if normalized_city not in normalized_city_data:
-            normalized_city_data[normalized_city] = {
-                'city': normalized_city,
-                'collected_amount': 0,
-                'repayment_amount': 0,
-                'total_applications': 0
-            }
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
         
-        normalized_city_data[normalized_city]['collected_amount'] += item['collected_amount'] or 0
-        normalized_city_data[normalized_city]['repayment_amount'] += item['repayment_amount'] or 0
-        normalized_city_data[normalized_city]['total_applications'] += item['total_applications']
-
-    # Calculate collection percentage for all cities
-    result = []
-    for city_info in normalized_city_data.values():
-        # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
-        if (city_info['total_applications'] >= 20 and 
-            city_info['repayment_amount'] and 
-            city_info['repayment_amount'] > 0):
-            uncollected_amount = city_info['repayment_amount'] - city_info['collected_amount']
-            collection_percentage = (city_info['collected_amount'] / city_info['repayment_amount']) * 100
-
-            result.append({
-                'city': city_info['city'],
-                'collected_amount': float(city_info['collected_amount']),
-                'repayment_amount': float(city_info['repayment_amount']),
-                'uncollected_amount': float(uncollected_amount),
-                'collection_percentage': float(collection_percentage),
-                'total_applications': city_info['total_applications']
-            })
-
-    # Sort by collection percentage (lowest first - worst performers) and take top 10
-    result.sort(key=lambda x: x['collection_percentage'], reverse=False)
-    result = result[:10]
-
-    return JsonResponse({
-        'data': result
-    })
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Group by city and calculate collection metrics
+        city_data = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            normalized_city = normalize_city_name(city)
+            
+            if normalized_city not in city_data:
+                city_data[normalized_city] = {
+                    'city': normalized_city,
+                    'collected_amount': Decimal('0'),
+                    'repayment_amount': Decimal('0'),
+                    'total_applications': 0
+                }
+            
+            city_data[normalized_city]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+            city_data[normalized_city]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+            city_data[normalized_city]['total_applications'] += 1
+        
+        # Convert to list and calculate collection percentage
+        result = []
+        for city_info in city_data.values():
+            # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
+            if (city_info['total_applications'] >= 20 and 
+                city_info['repayment_amount'] > 0):
+                collection_percentage = float((city_info['collected_amount'] / city_info['repayment_amount']) * 100)
+                uncollected_amount = float(city_info['repayment_amount'] - city_info['collected_amount'])
+                
+                result.append({
+                    'city': city_info['city'],
+                    'collected_amount': float(city_info['collected_amount']),
+                    'repayment_amount': float(city_info['repayment_amount']),
+                    'uncollected_amount': uncollected_amount,
+                    'collection_percentage': collection_percentage,
+                    'total_applications': city_info['total_applications']
+                })
+        
+        # Sort by collection percentage (lowest first - worst performers) and take top 10
+        result.sort(key=lambda x: x['collection_percentage'], reverse=False)
+        result = result[:10]
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
