@@ -124,7 +124,7 @@ if (window.history.replaceState) {
         <!-- Mobile Responsive Tab Navigation -->
         <div class="mb-6 sm:mb-8">
             <div class="flex space-x-1 bg-gray-600/20 p-1 rounded-lg border border-gray-500/20">
-                <button id="disbursalTab" onclick="switchTab('disbursal')" class="flex-1 px-1 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded-md transition-colors tab-button active">
+                <button id="disbursalTab" onclick="switchTab('disbursal')" class="flex-1 px-1 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded-md transition-colors tab-button">
                     <div class="flex items-center justify-center gap-1 sm:gap-2">
                         <svg class="h-3 w-3 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
                             <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="16" font-weight="bold">₹</text>
@@ -183,12 +183,12 @@ if (window.history.replaceState) {
                 </div>
                 <h2 class="text-2xl font-bold text-white mb-2">Disbursal Summary</h2>
                 <p class="text-gray-400 mb-6">Comprehensive disbursal analytics and loan distribution insights</p>
-                <div class="text-sm text-gray-500">Coming Soon - Advanced disbursal tracking and analysis</div>
+                <div class="text-sm text-gray-500">Ready for implementation - Clean slate to start fresh</div>
             </div>
         </div>
 
         <!-- Collection Without Fraud Tab -->
-        <div id="collectionContent" class="tab-content">
+        <div id="collectionContent" class="tab-content hidden">
         <!-- Collapsible Filters -->
         <div class="card mb-8">
             <div class="p-6 cursor-pointer" onclick="toggleFilters()">
@@ -1263,9 +1263,14 @@ if (window.history.replaceState) {
     }
 
 // Load city collected chart
-async function loadCityCollectedChart() {
+async function loadCityCollectedChart(filterParams = null) {
     try {
-        const params = new URLSearchParams(window.location.search);
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
         const response = await fetch(`/api/city-collected/?${params}`);
         const data = await response.json();
         
@@ -1352,9 +1357,14 @@ async function loadCityCollectedChart() {
 }
 
 // Load city uncollected chart
-async function loadCityUncollectedChart() {
+async function loadCityUncollectedChart(filterParams = null) {
     try {
-        const params = new URLSearchParams(window.location.search);
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
         const response = await fetch(`/api/city-uncollected/?${params}`);
         const data = await response.json();
         
@@ -1992,6 +2002,32 @@ function restoreFilterSectionState() {
     }
 }
 
+// Restore previously active tab from localStorage
+function restoreActiveTab() {
+    const savedTab = localStorage.getItem('activeTab');
+    console.log('Restoring active tab from localStorage:', savedTab);
+    
+    if (savedTab) {
+        // Check if the tab element exists
+        const tabButton = document.getElementById(savedTab + 'Tab');
+        const tabContent = document.getElementById(savedTab + 'Content');
+        
+        if (tabButton && tabContent) {
+            // Switch to the saved tab
+            switchTab(savedTab);
+            console.log('Successfully restored tab:', savedTab);
+        } else {
+            console.log('Tab elements not found for:', savedTab, '- Using default tab');
+            // Fall back to default tab (collection - which is the main dashboard)
+            switchTab('collection');
+        }
+    } else {
+        console.log('No saved tab found - Using default tab (collection)');
+        // Default to collection tab (main dashboard)
+        switchTab('collection');
+    }
+}
+
 // Load charts when page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Format all currency values
@@ -2035,6 +2071,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         });
     }
+    
+    // Restore previously active tab from localStorage
+    restoreActiveTab();
     
     loadDPDBucketData();
     loadStateRepaymentChart();
@@ -2566,34 +2605,83 @@ function setupAutoRefresh() {
             return;
         }
         
-        console.log('Refreshing dashboard data via API...');
+        // Get the currently active tab
+        const activeTab = localStorage.getItem('activeTab') || 'collection';
+        console.log(`Refreshing ${activeTab} tab data via API...`);
         
         try {
-            // Get current filter parameters
-            const currentUrl = new URL(window.location);
-            const currentParams = currentUrl.searchParams;
-            const params = new URLSearchParams();
-            
-            // Preserve all current filter parameters
-            for (const [key, value] of currentParams.entries()) {
-                if (value) {
-                    params.set(key, value);
+            // Refresh based on active tab
+            if (activeTab === 'collection') {
+                // Refresh Collection WITH Fraud tab
+                const currentUrl = new URL(window.location);
+                const currentParams = currentUrl.searchParams;
+                const params = new URLSearchParams();
+                
+                // Preserve all current filter parameters
+                for (const [key, value] of currentParams.entries()) {
+                    if (value) {
+                        params.set(key, value);
+                    }
                 }
+                
+                const filterParams = Object.fromEntries(params.entries());
+                const paramsString = params.toString();
+                await Promise.all([
+                    refreshKPIData(paramsString),
+                    loadDPDBucketData(filterParams),
+                    loadStateRepaymentChart(filterParams),
+                    loadTimeSeriesChart(filterParams),
+                    loadCityCollectedChart(filterParams),
+                    loadCityUncollectedChart(filterParams)
+                ]);
+                
+                console.log('Collection with Fraud tab data refreshed successfully');
+                
+            } else if (activeTab === 'fraud') {
+                // Refresh Collection WITHOUT Fraud tab
+                const form = document.getElementById('fraudFilterForm');
+                const filters = {};
+                
+                if (form) {
+                    const dateFrom = form.querySelector('input[name="date_from"]')?.value;
+                    const dateTo = form.querySelector('input[name="date_to"]')?.value;
+                    const dateType = form.querySelector('select[name="date_type"]')?.value;
+                    const closingStatus = form.querySelector('select[name="closing_status"]')?.value;
+                    const dpd = form.querySelector('select[name="dpd"]')?.value;
+                    const state = form.querySelector('select[name="state"]')?.value;
+                    const city = form.querySelector('select[name="city"]')?.value;
+                    
+                    if (dateFrom) filters.date_from = dateFrom;
+                    if (dateTo) filters.date_to = dateTo;
+                    if (dateType) filters.date_type = dateType;
+                    if (closingStatus) filters.closing_status = closingStatus;
+                    if (dpd) filters.dpd = dpd;
+                    if (state) filters.state = state;
+                    if (city) filters.city = city;
+                }
+                
+                await Promise.all([
+                    loadFraudKpiData(filters),
+                    loadFraudDpdTable(filters),
+                    loadFraudStateChart(filters),
+                    loadFraudTimeSeriesChart(filters),
+                    loadFraudCityCollectedChart(filters),
+                    loadFraudCityUncollectedChart(filters)
+                ]);
+                
+                console.log('Collection without Fraud tab data refreshed successfully');
+                
+            } else if (activeTab === 'dailyPerformance') {
+                // Refresh Daily Performance tab
+                await loadDailyPerformanceData();
+                console.log('Daily Performance tab data refreshed successfully');
+                
+            } else if (activeTab === 'loanCount') {
+                // Refresh Loan Count Wise tab
+                await loadLoanCountData();
+                console.log('Loan Count Wise tab data refreshed successfully');
             }
             
-            // Refresh all dashboard components with preserved parameters
-            const filterParams = Object.fromEntries(params.entries());
-            const paramsString = params.toString();
-            await Promise.all([
-                refreshKPIData(paramsString),
-                loadDPDBucketData(filterParams),
-                loadStateRepaymentChart(filterParams),
-                loadTimeSeriesChart(filterParams),
-                loadCityCollectedChart(filterParams),
-                loadCityUncollectedChart(filterParams)
-            ]);
-            
-            console.log('Dashboard data refreshed successfully');
         } catch (error) {
             console.error('Error refreshing dashboard data:', error);
         }
@@ -2822,9 +2910,14 @@ function showRefreshIndicator() {
 }
 
 // Load DPD Bucket Data
-async function loadDPDBucketData() {
+async function loadDPDBucketData(filterParams = null) {
     try {
-        const params = new URLSearchParams(window.location.search);
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
         const response = await fetch(`/api/dpd-buckets/?${params}`);
         const data = await response.json();
         
@@ -2870,9 +2963,14 @@ function getBucketColor(bucket) {
 }
 
 // Load State Repayment Chart
-async function loadStateRepaymentChart() {
+async function loadStateRepaymentChart(filterParams = null) {
     try {
-        const params = new URLSearchParams(window.location.search);
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
         const response = await fetch(`/api/state-repayment/?${params}`);
         const data = await response.json();
         
@@ -2937,9 +3035,14 @@ async function loadStateRepaymentChart() {
 }
 
 // Load Time Series Chart
-async function loadTimeSeriesChart() {
+async function loadTimeSeriesChart(filterParams = null) {
     try {
-        const params = new URLSearchParams(window.location.search);
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
         const response = await fetch(`/api/time-series/?${params}`);
         const data = await response.json();
         
@@ -3057,6 +3160,341 @@ async function loadTimeSeriesChart() {
     }
 }
 
+// ===============================
+// LOAN COUNT WISE TAB FUNCTIONALITY
+// ===============================
+
+// Set default date range for loan count (last 30 days)
+function setDefaultLoanCountDates() {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    const startDateInput = document.getElementById('loanCountStartDate');
+    const endDateInput = document.getElementById('loanCountEndDate');
+    
+    if (startDateInput && endDateInput) {
+        startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+        endDateInput.value = today.toISOString().split('T')[0];
+    }
+}
+
+// Load loan count data from API
+async function loadLoanCountData() {
+    try {
+        console.log('=== LOADING LOAN COUNT DATA ===');
+        
+        const startDate = document.getElementById('loanCountStartDate').value;
+        const endDate = document.getElementById('loanCountEndDate').value;
+        
+        console.log('Date values:', { startDate, endDate });
+        
+        if (!startDate || !endDate) {
+            alert('Please select both start and end dates');
+            return;
+        }
+        
+        // Validate date range
+        if (new Date(startDate) > new Date(endDate)) {
+            alert('Start date must be before end date');
+            return;
+        }
+        
+        // Show loading state
+        console.log('Showing loading state...');
+        showLoanCountLoading();
+        
+        // Fetch data from backend API
+        const apiUrl = `/api/loan-count-wise/?startDate=${startDate}&endDate=${endDate}`;
+        console.log('Fetching from:', apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        console.log('Loan count data received:', data);
+        
+        // Check if data exists
+        if (!data.count_wise || data.count_wise.length === 0) {
+            console.log('No data found, showing no data state');
+            showLoanCountNoData();
+            return;
+        }
+        
+        // Update tables with data
+        console.log('Updating tables with data...');
+        updateCountWiseTable(data.count_wise);
+        updateAmountWiseTable(data.amount_wise);
+        
+        // Show tables
+        console.log('Showing tables...');
+        showLoanCountTables();
+        
+        console.log('=== LOAN COUNT DATA LOADING COMPLETE ===');
+        
+    } catch (error) {
+        console.error('Error loading loan count data:', error);
+        showLoanCountError(error.message);
+    }
+}
+
+// Update count wise table
+function updateCountWiseTable(data) {
+    const tbody = document.getElementById('countWiseTableBody');
+    const totalElement = document.getElementById('countWiseTotal');
+    const badgeElement = document.getElementById('countWiseTotalCases');
+    
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-gray-400">No data available</td></tr>';
+        if (totalElement) totalElement.textContent = '0';
+        if (badgeElement) badgeElement.textContent = '0 Cases';
+        return;
+    }
+    
+    // Calculate total cases and find min/max for color scaling
+    const totalCases = data.reduce((sum, item) => sum + parseInt(item.total_case || 0), 0);
+    const caseValues = data.map(item => parseInt(item.total_case || 0));
+    const minCases = Math.min(...caseValues);
+    const maxCases = Math.max(...caseValues);
+    const range = maxCases - minCases;
+    
+    // Update badge and total
+    if (badgeElement) badgeElement.textContent = `${formatNumber(totalCases)} Cases`;
+    if (totalElement) totalElement.textContent = formatNumber(totalCases);
+    
+    // Populate table rows
+    data.forEach((item) => {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-700 hover:bg-gray-800/50 transition-colors';
+        
+        // Badge color based on total cases value (higher cases = redder color)
+        const currentCases = parseInt(item.total_case || 0);
+        const loanCount = parseInt(item.loan_count);
+        let badgeClass = 'bg-gray-600';
+        
+        if (range === 0) {
+            // All values are the same
+            badgeClass = 'bg-orange-500';
+        } else {
+            // Calculate relative position (0 = lowest, 1 = highest)
+            const relativePosition = (currentCases - minCases) / range;
+            
+            if (relativePosition <= 0.25) {
+                badgeClass = 'bg-yellow-500'; // Lowest 25% - yellow
+            } else if (relativePosition <= 0.5) {
+                badgeClass = 'bg-orange-300'; // 25-50% - light orange
+            } else if (relativePosition <= 0.75) {
+                badgeClass = 'bg-orange-500'; // 50-75% - orange
+            } else if (relativePosition <= 0.9) {
+                badgeClass = 'bg-red-400'; // 75-90% - light red
+            } else {
+                badgeClass = 'bg-red-600'; // Top 10% - red
+            }
+        }
+        
+        row.innerHTML = `
+            <td class="py-3 px-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${badgeClass} text-white">
+                    ${loanCount} ${loanCount === 1 ? 'Loan' : 'Loans'}
+                </span>
+            </td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatNumber(item.total_case)}</td>
+            <td class="py-3 px-4 text-right font-medium text-white">${parseFloat(item.percentage_share).toFixed(2)}%</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// Update amount wise table
+function updateAmountWiseTable(data) {
+    const tbody = document.getElementById('amountWiseTableBody');
+    const totalElement = document.getElementById('amountWiseTotal');
+    const badgeElement = document.getElementById('amountWiseTotalAmount');
+    
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="py-8 text-center text-gray-400">No data available</td></tr>';
+        if (totalElement) totalElement.textContent = '₹0';
+        if (badgeElement) badgeElement.textContent = '₹0';
+        return;
+    }
+    
+    // Calculate total due amount and find min/max for color scaling
+    const totalDue = data.reduce((sum, item) => sum + parseFloat(item.total_due || 0), 0);
+    const dueValues = data.map(item => parseFloat(item.total_due || 0));
+    const minDue = Math.min(...dueValues);
+    const maxDue = Math.max(...dueValues);
+    const range = maxDue - minDue;
+    
+    // Update badge and total
+    if (badgeElement) badgeElement.textContent = formatCurrency(totalDue);
+    if (totalElement) totalElement.textContent = formatCurrency(totalDue);
+    
+    // Populate table rows
+    data.forEach((item) => {
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-700 hover:bg-gray-800/50 transition-colors';
+        
+        // Badge color based on total due amount (higher amount = redder color)
+        const currentDue = parseFloat(item.total_due || 0);
+        const loanCount = parseInt(item.loan_count);
+        let badgeClass = 'bg-gray-600';
+        
+        if (range === 0) {
+            // All values are the same
+            badgeClass = 'bg-orange-500';
+        } else {
+            // Calculate relative position (0 = lowest, 1 = highest)
+            const relativePosition = (currentDue - minDue) / range;
+            
+            if (relativePosition <= 0.25) {
+                badgeClass = 'bg-yellow-500'; // Lowest 25% - yellow
+            } else if (relativePosition <= 0.5) {
+                badgeClass = 'bg-orange-300'; // 25-50% - light orange
+            } else if (relativePosition <= 0.75) {
+                badgeClass = 'bg-orange-500'; // 50-75% - orange
+            } else if (relativePosition <= 0.9) {
+                badgeClass = 'bg-red-400'; // 75-90% - light red
+            } else {
+                badgeClass = 'bg-red-600'; // Top 10% - red
+            }
+        }
+        
+        row.innerHTML = `
+            <td class="py-3 px-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${badgeClass} text-white">
+                    ${loanCount} ${loanCount === 1 ? 'Loan' : 'Loans'}
+                </span>
+            </td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatCurrency(item.total_due)}</td>
+            <td class="py-3 px-4 text-right font-medium text-white">${parseFloat(item.percentage_share).toFixed(2)}%</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// UI state management functions
+function showLoanCountLoading() {
+    document.getElementById('loanCountLoading')?.classList.remove('hidden');
+    document.getElementById('loanCountError')?.classList.add('hidden');
+    document.getElementById('loanCountTables')?.classList.add('hidden');
+    document.getElementById('loanCountNoData')?.classList.add('hidden');
+}
+
+function showLoanCountTables() {
+    document.getElementById('loanCountLoading')?.classList.add('hidden');
+    document.getElementById('loanCountError')?.classList.add('hidden');
+    document.getElementById('loanCountTables')?.classList.remove('hidden');
+    document.getElementById('loanCountNoData')?.classList.add('hidden');
+}
+
+function showLoanCountError(message) {
+    document.getElementById('loanCountLoading')?.classList.add('hidden');
+    document.getElementById('loanCountError')?.classList.remove('hidden');
+    document.getElementById('loanCountTables')?.classList.add('hidden');
+    document.getElementById('loanCountNoData')?.classList.add('hidden');
+    
+    const errorMessageEl = document.getElementById('loanCountErrorMessage');
+    if (errorMessageEl) {
+        errorMessageEl.textContent = message || 'Failed to load data. Please try again.';
+    }
+}
+
+function showLoanCountNoData() {
+    document.getElementById('loanCountLoading')?.classList.add('hidden');
+    document.getElementById('loanCountError')?.classList.add('hidden');
+    document.getElementById('loanCountTables')?.classList.add('hidden');
+    document.getElementById('loanCountNoData')?.classList.remove('hidden');
+}
+
+// Apply filters button handler
+function applyLoanCountFilters() {
+    console.log('=== APPLY LOAN COUNT FILTERS CLICKED ===');
+    console.log('Button click detected');
+    
+    // Test if elements exist
+    const startDateEl = document.getElementById('loanCountStartDate');
+    const endDateEl = document.getElementById('loanCountEndDate');
+    
+    console.log('Elements found:', {
+        startDateEl: !!startDateEl,
+        endDateEl: !!endDateEl,
+        startDate: startDateEl?.value,
+        endDate: endDateEl?.value
+    });
+    
+    if (!startDateEl || !endDateEl) {
+        console.error('Date elements not found!');
+        alert('Date input elements not found. Please refresh the page.');
+        return;
+    }
+    
+    loadLoanCountData();
+}
+
+// Reset filters button handler
+function resetLoanCountFilters() {
+    setDefaultLoanCountDates();
+    loadLoanCountData();
+}
+
+// Global debug function for testing
+window.testLoanCountTab = function() {
+    console.log('=== TESTING LOAN COUNT TAB ===');
+    
+    // Check if elements exist
+    const elements = {
+        loanCountContent: document.getElementById('loanCountContent'),
+        loanCountStartDate: document.getElementById('loanCountStartDate'),
+        loanCountEndDate: document.getElementById('loanCountEndDate'),
+        countWiseTableBody: document.getElementById('countWiseTableBody'),
+        amountWiseTableBody: document.getElementById('amountWiseTableBody')
+    };
+    
+    console.log('Elements check:', elements);
+    
+    // Check if tab is visible
+    const isVisible = !document.getElementById('loanCountContent').classList.contains('hidden');
+    console.log('Tab is visible:', isVisible);
+    
+    // Check date values
+    const dates = {
+        startDate: document.getElementById('loanCountStartDate')?.value,
+        endDate: document.getElementById('loanCountEndDate')?.value
+    };
+    console.log('Date values:', dates);
+    
+    // Test API call directly
+    if (dates.startDate && dates.endDate) {
+        console.log('Testing direct API call...');
+        fetch(`/api/loan-count-wise/?startDate=${dates.startDate}&endDate=${dates.endDate}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Direct API response:', data);
+            })
+            .catch(error => {
+                console.error('Direct API error:', error);
+            });
+    }
+    
+    return elements;
+};
+
 // Tab Management
 function switchTab(tabName) {
     // Hide all tab contents
@@ -3075,10 +3513,31 @@ function switchTab(tabName) {
     // Add active class to selected tab
     document.getElementById(tabName + 'Tab').classList.add('active');
     
+    // Save current active tab to localStorage
+    localStorage.setItem('activeTab', tabName);
+    console.log('Active tab saved to localStorage:', tabName);
+    
     // Initialize fraud tab if it's being switched to
     if (tabName === 'fraud') {
         console.log('Switching to fraud tab, initializing...');
         initializeFraudTab();
+    }
+    
+    // Initialize daily performance tab if it's being switched to
+    if (tabName === 'dailyPerformance') {
+        console.log('Switching to daily performance tab, initializing...');
+        loadDailyPerformanceData();
+    }
+    
+    // Initialize loan count tab if it's being switched to
+    if (tabName === 'loanCount') {
+        console.log('Switching to loan count tab, initializing...');
+        setDefaultLoanCountDates();
+    }
+    
+    // Initialize disbursal tab if it's being switched to
+    if (tabName === 'disbursal') {
+        console.log('Switching to disbursal tab - ready for implementation');
     }
     
 }
@@ -4384,22 +4843,311 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Loan Count Wise Tab -->
         <div id="loanCountContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
-            <div class="card">
-                <div class="p-6 text-center">
-                    <h2 class="text-xl font-semibold text-white mb-4">Loan Count Wise</h2>
-                    <p class="text-gray-400 mb-6">Comprehensive loan count analysis and insights</p>
-                    <div class="text-sm text-gray-500">Coming Soon - Advanced loan count tracking and analysis</div>
+            
+            <!-- Coming Soon Banner -->
+            <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
+                <div class="flex items-center justify-center gap-3 mb-2">
+                    <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <h3 class="text-3xl font-bold text-yellow-400">COMING SOON</h3>
+                </div>
+                <p class="text-gray-300 text-lg">This feature is under development and will be available shortly</p>
+            </div>
+
+            <!-- Header with Date Filters -->
+            <div class="card mb-6">
+                <div class="p-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white mb-1">Loan Count Wise Analysis</h2>
+                            <p class="text-sm text-gray-400">Track loan performance by count and amount distribution</p>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-400 whitespace-nowrap">Start Date:</label>
+                                <input type="date" id="loanCountStartDate" class="input-field text-sm px-3 py-2">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-400 whitespace-nowrap">End Date:</label>
+                                <input type="date" id="loanCountEndDate" class="input-field text-sm px-3 py-2">
+                            </div>
+                            <button onclick="applyLoanCountFilters()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">
+                                <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                                Apply
+                            </button>
+                            <button onclick="resetLoanCountFilters()" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Loading State -->
+            <div id="loanCountLoading" class="hidden">
+                <div class="card p-12">
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                        <p class="text-gray-400">Loading loan count data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="loanCountError" class="hidden">
+                <div class="card p-6">
+                    <div class="flex items-center gap-3 text-red-400">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span id="loanCountErrorMessage">Failed to load data. Please try again.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Tables -->
+            <div id="loanCountTables" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                
+                <!-- Count Wise Distribution Table -->
+            <div class="card">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white">Count Wise Distribution</h3>
+                            <div class="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                                <span class="text-sm text-blue-400 font-medium" id="countWiseTotalCases">0 Cases</span>
+                </div>
+            </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-600">
+                                        <th class="text-left py-3 px-4 text-gray-300 font-semibold">Loan Count</th>
+                                        <th class="text-right py-3 px-4 text-gray-300 font-semibold">Total Cases</th>
+                                        <th class="text-right py-3 px-4 text-gray-300 font-semibold">Share %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="countWiseTableBody">
+                                    <tr>
+                                        <td colspan="3" class="py-8 text-center text-gray-400">Select date range and click Apply to load data</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Summary -->
+                        <div class="mt-4 pt-4 border-t border-gray-600">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-400">Total Cases:</span>
+                                <span class="text-lg font-bold text-white" id="countWiseTotal">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Amount Wise Distribution Table -->
+                <div class="card">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white">Amount Wise Distribution</h3>
+                            <div class="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+                                <span class="text-sm text-green-400 font-medium" id="amountWiseTotalAmount">₹0</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-600">
+                                        <th class="text-left py-3 px-4 text-gray-300 font-semibold">Loan Count</th>
+                                        <th class="text-right py-3 px-4 text-gray-300 font-semibold">Total Due</th>
+                                        <th class="text-right py-3 px-4 text-gray-300 font-semibold">Share %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="amountWiseTableBody">
+                                    <tr>
+                                        <td colspan="3" class="py-8 text-center text-gray-400">Select date range and click Apply to load data</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Summary -->
+                        <div class="mt-4 pt-4 border-t border-gray-600">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-400">Total Due Amount:</span>
+                                <span class="text-lg font-bold text-white" id="amountWiseTotal">₹0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- No Data State -->
+            <div id="loanCountNoData" class="hidden">
+                <div class="card p-12">
+                    <div class="flex flex-col items-center justify-center">
+                        <svg class="h-16 w-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <h3 class="text-lg font-semibold text-white mb-2">No Data Found</h3>
+                        <p class="text-gray-400 text-center">No loan count data available for the selected date range.<br>Please try adjusting your filters.</p>
+                    </div>
+                </div>
+            </div>
+
         </div> <!-- End Loan Count Wise Tab -->
 
         <!-- Daily Performance Metrics Tab -->
         <div id="dailyPerformanceContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
+            
+            <!-- Coming Soon Banner -->
+            <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
+                <div class="flex items-center justify-center gap-3 mb-2">
+                    <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <h3 class="text-3xl font-bold text-yellow-400">COMING SOON</h3>
+                </div>
+                <p class="text-gray-300 text-lg">This feature is under development and will be available shortly</p>
+            </div>
+
+            <!-- Performance Report Header -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-2">
+                    <h1 class="text-2xl font-bold text-white">Performance Report - BlinkR Loan</h1>
+                    <div class="flex items-center gap-2">
+                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        <span class="text-white font-semibold">17</span>
+                    </div>
+                </div>
+                <div class="flex gap-6 text-sm text-gray-300">
+                    <div>Report Date: <span id="reportDate" class="text-white font-medium">--</span></div>
+                    <div>Position as on: <span id="positionDate" class="text-white font-medium">--</span></div>
+                </div>
+            </div>
+
+            <!-- Sanction Performance Section -->
+            <div class="card mb-6">
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h2 class="text-xl font-semibold text-white">Sanction Performance</h2>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Target of Sanction for the current Month:</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-white">₹</span>
+                                    <input 
+                                        type="text" 
+                                        id="monthlyTarget" 
+                                        class="monthly-target-input bg-transparent border-none text-white font-semibold w-32 text-right focus:outline-none focus:ring-0 focus:border-transparent cursor-pointer hover:bg-gray-700 hover:border hover:border-gray-600 hover:rounded hover:px-3 hover:py-1 transition-all duration-200"
+                                        placeholder="Click to set target"
+                                        oninput="formatNumberInput(this)"
+                                        onkeyup="formatNumberInput(this)"
+                                        onchange="updateMonthlyTarget(this.value)"
+                                        onfocus="showInputStyle(this)"
+                                        onblur="hideInputStyle(this)"
+                                        onclick="this.select()"
+                                    />
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Today's Disbursement:</span>
+                                <span class="text-white font-semibold">₹ <span id="todayDisbursement">0</span></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Figures Achieved (till today):</span>
+                                <span class="text-white font-semibold">₹ <span id="totalAchieved">0</span></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Achievement %:</span>
+                                <span class="text-white font-semibold"><span id="achievementPercentage">0</span>%</span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Yet to be Achieved:</span>
+                                <span class="text-white font-semibold">₹ <span id="yetToAchieve">0</span></span>
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Yet to be Achieved %:</span>
+                                <span class="text-white font-semibold"><span id="yetToAchievePercentage">0</span>%</span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Days Completed:</span>
+                                <span class="text-white font-semibold"><span id="daysCompleted">0</span></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Remaining Days:</span>
+                                <span class="text-white font-semibold"><span id="remainingDays">0</span></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Current Daily Performance:</span>
+                                <span class="text-white font-semibold">₹ <span id="currentDailyPerformance">0</span></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-300">Required Daily Performance:</span>
+                                <span class="text-white font-semibold">₹ <span id="requiredDailyPerformance">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Collection Efficiency Section -->
+            <div class="card mb-6">
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <svg class="h-6 w-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <h2 class="text-xl font-semibold text-white">Collection Efficiency</h2>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                            <span class="text-gray-300">Collection Efficiency (Current Month):</span>
+                            <span id="currentCollectionEfficiency" class="text-white font-semibold px-3 py-1 rounded bg-green-600">0%</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                            <span class="text-gray-300">Benchmark Collection Efficiency (till 25th of month):</span>
+                            <span class="text-white font-semibold"><span id="benchmarkEfficiency">0</span>%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historical Collection Efficiency Section -->
             <div class="card">
-                <div class="p-6 text-center">
-                    <h2 class="text-xl font-semibold text-white mb-4">Daily Performance Metrics</h2>
-                    <p class="text-gray-400 mb-6">Comprehensive daily performance tracking and analytics</p>
-                    <div class="text-sm text-gray-500">Coming Soon - Advanced daily performance monitoring and insights</div>
+                <div class="p-6">
+                    <div class="flex items-center gap-3 mb-6">
+                        <svg class="h-6 w-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <h2 class="text-xl font-semibold text-white">Historical Collection Efficiency</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="text-left py-3 px-4 text-gray-300 font-medium">Month</th>
+                                    <th class="text-right py-3 px-4 text-gray-300 font-medium">Actual</th>
+                                    <th class="text-right py-3 px-4 text-gray-300 font-medium">Benchmark</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historicalDataTable">
+                                <!-- Data will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div> <!-- End Daily Performance Metrics Tab -->
@@ -4450,6 +5198,302 @@ window.saveTestFilters = function() {
 window.restoreTestFilters = function() {
     restoreMainFilters();
 };
+
+// Debug function to check saved tab
+window.debugActiveTab = function() {
+    console.log('=== Active Tab Debug ===');
+    const savedTab = localStorage.getItem('activeTab');
+    console.log('Saved tab:', savedTab);
+    
+    if (savedTab) {
+        const tabButton = document.getElementById(savedTab + 'Tab');
+        const tabContent = document.getElementById(savedTab + 'Content');
+        console.log('Tab button exists:', !!tabButton);
+        console.log('Tab content exists:', !!tabContent);
+    }
+    console.log('=== End Debug ===');
+};
+
+// Debug function to clear saved tab (reset to default)
+window.clearSavedTab = function() {
+    localStorage.removeItem('activeTab');
+    console.log('Saved tab cleared. Refresh the page to see the default tab.');
+};
+
+// Load Daily Performance Metrics Data
+async function loadDailyPerformanceData() {
+    try {
+        console.log('Loading daily performance metrics data...');
+        
+        // Get current filter values from the form
+        const filterForm = document.getElementById('filterForm');
+        const formData = new FormData(filterForm);
+        const params = new URLSearchParams();
+        
+        // Add current filter values
+        for (const [key, value] of formData.entries()) {
+            if (value && value.trim() !== '') {
+                params.append(key, value);
+            }
+        }
+        
+        const response = await fetch(`/api/daily-performance/?${params}`);
+        const data = await response.json();
+        
+        console.log('Daily performance data loaded:', data);
+        
+        // Update report dates
+        document.getElementById('reportDate').textContent = data.report_date || '--';
+        document.getElementById('positionDate').textContent = data.position_as_on || '--';
+        
+        // Update Sanction Performance section
+        const sanction = data.sanction_performance;
+        const monthlyTargetInput = document.getElementById('monthlyTarget');
+        
+        // Only update monthly target if user is NOT currently editing it
+        if (document.activeElement !== monthlyTargetInput) {
+            // Format and set the monthly target value
+            console.log('Monthly target from API:', sanction.monthly_target);
+            const formattedTarget = formatIndianNumber(sanction.monthly_target.toString());
+            console.log('Formatted target:', formattedTarget);
+            monthlyTargetInput.value = formattedTarget;
+            
+            // Apply normal text styling since it has a value
+            if (monthlyTargetInput.value && monthlyTargetInput.value !== '0') {
+                hideInputStyle(monthlyTargetInput);
+            }
+        } else {
+            console.log('Skipping monthly target update - user is editing');
+        }
+        document.getElementById('todayDisbursement').textContent = formatNumber(sanction.today_disbursement);
+        document.getElementById('totalAchieved').textContent = formatNumber(sanction.total_achieved);
+        document.getElementById('achievementPercentage').textContent = sanction.achievement_percentage.toFixed(1);
+        document.getElementById('yetToAchieve').textContent = formatNumber(sanction.yet_to_achieve);
+        document.getElementById('yetToAchievePercentage').textContent = sanction.yet_to_achieve_percentage.toFixed(1);
+        document.getElementById('daysCompleted').textContent = sanction.days_completed;
+        document.getElementById('remainingDays').textContent = sanction.remaining_days;
+        document.getElementById('currentDailyPerformance').textContent = formatNumber(sanction.current_daily_performance);
+        document.getElementById('requiredDailyPerformance').textContent = formatNumber(sanction.required_daily_performance);
+        
+        // Update Collection Efficiency section
+        const collection = data.collection_efficiency;
+        const currentEfficiency = document.getElementById('currentCollectionEfficiency');
+        currentEfficiency.textContent = collection.current_month_efficiency.toFixed(1) + '%';
+        
+        // Change background color based on performance
+        if (collection.current_month_efficiency >= collection.benchmark_efficiency) {
+            currentEfficiency.className = 'text-white font-semibold px-3 py-1 rounded bg-green-600';
+        } else {
+            currentEfficiency.className = 'text-white font-semibold px-3 py-1 rounded bg-red-600';
+        }
+        
+        document.getElementById('benchmarkEfficiency').textContent = collection.benchmark_efficiency;
+        
+        // Update Historical Collection Efficiency section
+        const historicalTable = document.getElementById('historicalDataTable');
+        historicalTable.innerHTML = '';
+        
+        data.historical_collection_efficiency.forEach(item => {
+            const row = document.createElement('tr');
+            row.className = 'border-b border-gray-700';
+            
+            // Determine background color for actual performance
+            let actualBgClass = 'px-3 py-1 rounded';
+            if (item.actual >= item.benchmark) {
+                actualBgClass += ' bg-green-600 text-white';
+            } else {
+                actualBgClass += ' bg-red-600 text-white';
+            }
+            
+            row.innerHTML = `
+                <td class="py-3 px-4 text-gray-300">${item.month}</td>
+                <td class="py-3 px-4 text-right">
+                    <span class="font-semibold ${actualBgClass}">${item.actual.toFixed(1)}%</span>
+                </td>
+                <td class="py-3 px-4 text-right text-white font-semibold">${item.benchmark}%</td>
+            `;
+            
+            historicalTable.appendChild(row);
+        });
+        
+        console.log('Daily performance metrics updated successfully');
+        
+    } catch (error) {
+        console.error('Error loading daily performance metrics:', error);
+        // Show error state or fallback data
+        document.getElementById('reportDate').textContent = 'Error';
+        document.getElementById('positionDate').textContent = 'Error';
+    }
+}
+
+// Format number input with comma separators (Indian format)
+function formatNumberInput(input) {
+    // Remove all non-digit characters
+    let value = input.value.replace(/[^\d]/g, '');
+    
+    // Add commas for thousands separators (Indian format)
+    if (value.length > 0) {
+        value = formatIndianNumber(value);
+    }
+    
+    // Update the input value
+    input.value = value;
+}
+
+// Simple Indian number formatting function using regex
+function formatIndianNumber(numStr) {
+    // Remove any existing commas
+    numStr = numStr.replace(/,/g, '');
+    
+    // Handle empty or very small numbers
+    if (!numStr || numStr.length <= 3) {
+        return numStr;
+    }
+    
+    // Convert to number to ensure it's valid
+    const num = parseInt(numStr);
+    if (isNaN(num)) {
+        return numStr;
+    }
+    
+    // Use regex to format Indian style: groups of 2 from right, except last 3
+    // This regex will match: last 3 digits, then groups of 2 digits from right to left
+    return numStr.replace(/(\d)(?=(\d{2})*(\d{3})$)/g, '$1,');
+}
+
+// Debug function to test formatting (can be called from browser console)
+window.testFormatting = function() {
+    console.log('Testing formatting...');
+    
+    // Test multiple values
+    const testValues = ['80000000', '100000000', '150000000', '1000000', '100000'];
+    
+    testValues.forEach(value => {
+        console.log(`Testing ${value}:`);
+        const result = formatIndianNumber(value);
+        console.log(`Result: ${result}`);
+    });
+    
+    // Test the input field directly
+    const input = document.getElementById('monthlyTarget');
+    if (input) {
+        console.log('Testing input field...');
+        input.value = '80000000';
+        console.log('Before formatting:', input.value);
+        formatNumberInput(input);
+        console.log('After formatting:', input.value);
+    } else {
+        console.log('Input field not found!');
+    }
+    
+    console.log('Test completed. Check console for results.');
+}
+
+// Quick test function for immediate testing
+window.quickTest = function() {
+    const input = document.getElementById('monthlyTarget');
+    if (input) {
+        input.value = '80000000';
+        formatNumberInput(input);
+        console.log('Quick test result:', input.value);
+    }
+}
+
+// Show input styling when focused
+function showInputStyle(input) {
+    input.classList.remove('bg-transparent', 'border-none');
+    input.classList.add('bg-gray-700', 'border', 'border-gray-600', 'rounded', 'px-3', 'py-1');
+}
+
+// Hide input styling when not focused (make it look like normal text)
+function hideInputStyle(input) {
+    if (input.value && input.value.trim() !== '') {
+        input.classList.remove('bg-gray-700', 'border', 'border-gray-600', 'rounded', 'px-3', 'py-1');
+        input.classList.add('bg-transparent', 'border-none');
+    }
+}
+
+// Update monthly target and recalculate metrics
+async function updateMonthlyTarget(newTarget) {
+    try {
+        // Remove commas and convert to number
+        const numericTarget = newTarget.replace(/,/g, '');
+        console.log('Updating monthly target to:', numericTarget);
+        
+        // First, save the target to database via POST request
+        const saveResponse = await fetch('/api/daily-performance/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                monthly_target: numericTarget
+            })
+        });
+        
+        const saveData = await saveResponse.json();
+        if (saveData.success) {
+            console.log('Target saved to database:', saveData.message);
+        } else {
+            console.error('Failed to save target:', saveData.message);
+            return;
+        }
+        
+        // Then fetch updated data with current filters
+        const filterForm = document.getElementById('filterForm');
+        const formData = new FormData(filterForm);
+        const params = new URLSearchParams();
+        
+        // Add current filter values
+        for (const [key, value] of formData.entries()) {
+            if (value && value.trim() !== '') {
+                params.append(key, value);
+            }
+        }
+        
+        const response = await fetch(`/api/daily-performance/?${params}`);
+        const data = await response.json();
+        
+        console.log('Updated daily performance data:', data);
+        
+        // Update only the sanction performance metrics that depend on the target
+        const sanction = data.sanction_performance;
+        document.getElementById('achievementPercentage').textContent = sanction.achievement_percentage.toFixed(1);
+        document.getElementById('yetToAchieve').textContent = formatNumber(sanction.yet_to_achieve);
+        document.getElementById('yetToAchievePercentage').textContent = sanction.yet_to_achieve_percentage.toFixed(1);
+        document.getElementById('requiredDailyPerformance').textContent = formatNumber(sanction.required_daily_performance);
+        
+        console.log('Monthly target updated successfully');
+        
+    } catch (error) {
+        console.error('Error updating monthly target:', error);
+    }
+}
+
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+
+
+// ===============================
+// DISBURSAL TAB FUNCTIONALITY
+// ===============================
+
+// Disbursal tab is ready for fresh implementation
 
 
 

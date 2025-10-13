@@ -26,9 +26,8 @@ urlpatterns = [
     path('api/fraud/city-collected/', views.api_fraud_city_collected, name='api_fraud_city_collected'),
     path('api/fraud/city-uncollected/', views.api_fraud_city_uncollected, name='api_fraud_city_uncollected'),
     path('api/fraud/total-applications-details/', views.api_fraud_total_applications_details, name='api_fraud_total_applications_details'),
-    # Loan Count Wise API endpoints
-    path('api/loan-count/kpi-data/', views.api_loan_count_kpi_data, name='api_loan_count_kpi_data'),
-    path('api/loan-count/cases/', views.api_loan_count_cases, name='api_loan_count_cases'),
-    path('api/loan-count/due-amount/', views.api_loan_count_due_amount, name='api_loan_count_due_amount'),
-    path('api/loan-count/increase-rate/', views.api_loan_amount_increase_rate, name='api_loan_amount_increase_rate'),
+    # Loan Count Wise API endpoint
+    path('api/loan-count-wise/', views.api_loan_count_wise, name='api_loan_count_wise'),
+    # Daily Performance Metrics API endpoints
+    path('api/daily-performance/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
 ]

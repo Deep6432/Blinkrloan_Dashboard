@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 import json
 import requests
 
-from .models import LoanRecord
+from .models import LoanRecord, MonthlyTarget
 from .services import DataSyncService
 
 
@@ -850,35 +850,65 @@ def api_city_uncollected(request):
 
 @require_http_methods(["GET"])
 def api_time_series(request):
-    """API endpoint for time series data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    # Group by repayment date
-    time_data = queryset.values('repayment_date').annotate(
-        repayment_amount=Sum('repayment_amount'),
-        collected_amount=Sum('total_received')
-    ).order_by('repayment_date')
-    
-    # Calculate collection percentage
-    result = []
-    for item in time_data:
-        collection_percentage = 0
-        if item['repayment_amount'] and item['repayment_amount'] > 0:
-            collection_percentage = (item['collected_amount'] / item['repayment_amount']) * 100
+    """API endpoint for time series data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        result.append({
-            'date': item['repayment_date'].strftime('%Y-%m-%d') if item['repayment_date'] else '',
-            'repayment_amount': float(item['repayment_amount'] or 0),
-            'collected_amount': float(item['collected_amount'] or 0),
-            'collection_percentage': float(collection_percentage)
-        })
-    
-    return JsonResponse({
-        'data': result
-    })
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Group by repayment date
+        date_data = {}
+        for record in filtered_records:
+            repayment_date_str = record.get('repayment_date')
+            if repayment_date_str:
+                try:
+                    # Parse datetime safely - handles both UTC and IST formats
+                    repayment_date = parse_datetime_safely(repayment_date_str)
+                    if repayment_date:
+                        date_key = repayment_date.strftime('%Y-%m-%d')
+                        
+                        if date_key not in date_data:
+                            date_data[date_key] = {
+                                'date': date_key,
+                                'repayment_amount': Decimal('0'),
+                                'collected_amount': Decimal('0')
+                            }
+                        
+                        date_data[date_key]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+                        date_data[date_key]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+                except:
+                    continue
+        
+        # Convert to list and format
+        time_series_data = []
+        for date_info in date_data.values():
+            repayment_amount = float(date_info['repayment_amount'])
+            collected_amount = float(date_info['collected_amount'])
+            collection_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
+            time_series_data.append({
+                'date': date_info['date'],
+                'repayment_amount': repayment_amount,
+                'collected_amount': collected_amount,
+                'collection_percentage': collection_percentage
+            })
+        
+        # Sort by date
+        time_series_data.sort(key=lambda x: x['date'])
+        
+        return JsonResponse({'data': time_series_data})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["POST"])
@@ -1938,268 +1968,258 @@ def api_fraud_city_uncollected(request):
 
 
 
-# Loan Count Wise API endpoints
+
+
+# Loan Count Wise API endpoint
 @require_http_methods(["GET"])
-def api_loan_count_cases(request):
-    """API endpoint for loan count wise cases analysis"""
+def api_loan_count_wise(request):
+    """API endpoint for Loan Count Wise data"""
     try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
+        # Get date parameters from request
+        start_date = request.GET.get('startDate', '')
+        end_date = request.GET.get('endDate', '')
         
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({'data': []})
-        
-        # Group by loan count ranges
-        loan_count_ranges = {
-            '1-5': {'min': 1, 'max': 5, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '6-10': {'min': 6, 'max': 10, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '11-20': {'min': 11, 'max': 20, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '21-50': {'min': 21, 'max': 50, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '51-100': {'min': 51, 'max': 100, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '100+': {'min': 101, 'max': float('inf'), 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')}
-        }
-        
-        for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
-            
-            # Determine which range this loan falls into
-            for range_name, range_data in loan_count_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['cases'] += 1
-                    range_data['total_amount'] += loan_amount
-                    range_data['due_amount'] += due_amount
-                    break
-        
-        # Convert to response format
-        result = []
-        for range_name, range_data in loan_count_ranges.items():
-            if range_data['cases'] > 0:
-                result.append({
-                    'range': range_name,
-                    'cases': range_data['cases'],
-                    'total_amount': float(range_data['total_amount']),
-                    'due_amount': float(range_data['due_amount']),
-                    'avg_amount': float(range_data['total_amount'] / range_data['cases']) if range_data['cases'] > 0 else 0
-                })
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan count cases data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_count_due_amount(request):
-    """API endpoint for loan count wise due amount analysis"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({'data': []})
-        
-        # Group by loan amount ranges and calculate due amounts
-        loan_ranges = {
-            '0-10K': {'min': 0, 'max': 10000, 'due_amount': Decimal('0'), 'cases': 0},
-            '10K-25K': {'min': 10000, 'max': 25000, 'due_amount': Decimal('0'), 'cases': 0},
-            '25K-50K': {'min': 25000, 'max': 50000, 'due_amount': Decimal('0'), 'cases': 0},
-            '50K-100K': {'min': 50000, 'max': 100000, 'due_amount': Decimal('0'), 'cases': 0},
-            '100K-250K': {'min': 100000, 'max': 250000, 'due_amount': Decimal('0'), 'cases': 0},
-            '250K+': {'min': 250000, 'max': float('inf'), 'due_amount': Decimal('0'), 'cases': 0}
-        }
-        
-        for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
-            
-            # Determine which range this loan falls into
-            for range_name, range_data in loan_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['due_amount'] += due_amount
-                    range_data['cases'] += 1
-                    break
-        
-        # Convert to response format
-        result = []
-        for range_name, range_data in loan_ranges.items():
-            if range_data['cases'] > 0:
-                result.append({
-                    'range': range_name,
-                    'due_amount': float(range_data['due_amount']),
-                    'cases': range_data['cases'],
-                    'avg_due_amount': float(range_data['due_amount'] / range_data['cases']) if range_data['cases'] > 0 else 0
-                })
-        
-        # Sort by due amount descending
-        result.sort(key=lambda x: x['due_amount'], reverse=True)
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan count due amount data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_amount_increase_rate(request):
-    """API endpoint for loan amount increase rate analysis"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({'data': []})
-        
-        # Group by time periods (monthly)
-        monthly_data = {}
-        
-        for record in filtered_records:
-            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-            if disbursal_date:
-                month_key = disbursal_date.strftime('%Y-%m')
-                loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-                
-                if month_key not in monthly_data:
-                    monthly_data[month_key] = {
-                        'month': month_key,
-                        'total_amount': Decimal('0'),
-                        'cases': 0,
-                        'avg_amount': Decimal('0')
-                    }
-                
-                monthly_data[month_key]['total_amount'] += loan_amount
-                monthly_data[month_key]['cases'] += 1
-        
-        # Calculate average amounts and increase rates
-        result = []
-        prev_avg_amount = None
-        
-        for month_key in sorted(monthly_data.keys()):
-            data = monthly_data[month_key]
-            data['avg_amount'] = data['total_amount'] / data['cases'] if data['cases'] > 0 else Decimal('0')
-            
-            increase_rate = 0
-            if prev_avg_amount and prev_avg_amount > 0:
-                increase_rate = float(((data['avg_amount'] - prev_avg_amount) / prev_avg_amount) * 100)
-            
-            result.append({
-                'month': data['month'],
-                'total_amount': float(data['total_amount']),
-                'cases': data['cases'],
-                'avg_amount': float(data['avg_amount']),
-                'increase_rate': increase_rate
-            })
-            
-            prev_avg_amount = data['avg_amount']
-        
-        # Take last 12 months
-        result = result[-12:] if len(result) > 12 else result
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan amount increase rate data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_count_kpi_data(request):
-    """API endpoint for loan count wise KPI data"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
+        # Validate date parameters
+        if not start_date or not end_date:
             return JsonResponse({
-                'total_cases': 0,
-                'total_due_amount': 0,
-                'avg_loan_amount': 0,
-                'highest_due_range': 'N/A',
-                'growth_rate': 0
-            })
+                'error': 'Start date and end date are required',
+                'count_wise': [],
+                'amount_wise': []
+            }, status=400)
         
-        # Calculate KPIs
-        total_cases = len(filtered_records)
-        total_due_amount = sum(safe_decimal_conversion(record.get('due_amount', 0)) for record in filtered_records)
-        total_loan_amount = sum(safe_decimal_conversion(record.get('loan_amount', 0)) for record in filtered_records)
-        avg_loan_amount = total_loan_amount / total_cases if total_cases > 0 else Decimal('0')
-        
-        # Find range with highest due amount
-        loan_ranges = {
-            '0-10K': {'min': 0, 'max': 10000, 'due_amount': Decimal('0')},
-            '10K-25K': {'min': 10000, 'max': 25000, 'due_amount': Decimal('0')},
-            '25K-50K': {'min': 25000, 'max': 50000, 'due_amount': Decimal('0')},
-            '50K-100K': {'min': 50000, 'max': 100000, 'due_amount': Decimal('0')},
-            '100K-250K': {'min': 100000, 'max': 250000, 'due_amount': Decimal('0')},
-            '250K+': {'min': 250000, 'max': float('inf'), 'due_amount': Decimal('0')}
+        # Build API URL with date parameters
+        loan_count_api_url = "https://backend.blinkrloan.com/insights/v1/dueLoanCountWise"
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
         }
         
-        for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
-            
-            for range_name, range_data in loan_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['due_amount'] += due_amount
-                    break
+        logger.info(f"Fetching loan count wise data with params: {params}")
         
-        highest_due_range = max(loan_ranges.items(), key=lambda x: x[1]['due_amount'])[0]
+        # Fetch data from the external API
+        response = requests.get(loan_count_api_url, params=params, timeout=30)
+        response.raise_for_status()
+        api_data = response.json()
         
-        # Calculate growth rate (simplified - comparing last 2 months)
-        monthly_totals = {}
-        for record in filtered_records:
-            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-            if disbursal_date:
-                month_key = disbursal_date.strftime('%Y-%m')
-                loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-                
-                if month_key not in monthly_totals:
-                    monthly_totals[month_key] = Decimal('0')
-                monthly_totals[month_key] += loan_amount
+        logger.info(f"Received loan count wise data: {api_data}")
         
-        growth_rate = 0
-        if len(monthly_totals) >= 2:
-            sorted_months = sorted(monthly_totals.keys())
-            current_month = monthly_totals[sorted_months[-1]]
-            previous_month = monthly_totals[sorted_months[-2]]
-            
-            if previous_month > 0:
-                growth_rate = float(((current_month - previous_month) / previous_month) * 100)
+        # Extract count_wise and amount_wise data from the response
+        count_wise = api_data.get('data', {}).get('count_wise', [])
+        amount_wise = api_data.get('data', {}).get('amount_wise', [])
         
         return JsonResponse({
-            'total_cases': total_cases,
-            'total_due_amount': float(total_due_amount),
-            'avg_loan_amount': float(avg_loan_amount),
-            'highest_due_range': highest_due_range,
-            'growth_rate': growth_rate
+            'success': True,
+            'message': api_data.get('message', 'Data fetched successfully'),
+            'count_wise': count_wise,
+            'amount_wise': amount_wise,
+            'filters': {
+                'start_date': start_date,
+                'end_date': end_date
+            }
+        })
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching loan count wise data from external API: {e}")
+        return JsonResponse({
+            'error': 'Failed to fetch data from external API',
+            'count_wise': [],
+            'amount_wise': []
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Error in loan count wise API: {e}", exc_info=True)
+        return JsonResponse({
+            'error': 'Failed to fetch loan count wise data',
+            'count_wise': [],
+            'amount_wise': []
+        }, status=500)
+
+
+@require_http_methods(["GET", "POST"])
+def api_daily_performance_metrics(request):
+    """API endpoint for Daily Performance Metrics data"""
+    try:
+        from datetime import datetime, timedelta
+        import calendar
+        
+        # Handle POST request to update monthly target
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+                target_amount = data.get('monthly_target')
+                if target_amount:
+                    target_amount = str(target_amount).replace(',', '')  # Remove commas
+                    monthly_target = MonthlyTarget.set_current_month_target(target_amount)
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Monthly target updated successfully',
+                        'target_amount': float(monthly_target.target_amount)
+                    })
+            except (ValueError, InvalidOperation, json.JSONDecodeError) as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Invalid target amount'
+                }, status=400)
+        
+        # Fetch data from the external API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        records = data.get('pr', [])
+        
+        # Apply filters
+        filtered_records = apply_fraud_filters(records, request)
+        
+        # Get current date and calculate month info
+        today = datetime.now().date()
+        current_month = today.month
+        current_year = today.year
+        days_in_month = calendar.monthrange(current_year, current_month)[1]
+        
+        # Calculate date ranges
+        month_start = datetime(current_year, current_month, 1).date()
+        month_end = datetime(current_year, current_month, days_in_month).date()
+        
+        # Filter records for current month
+        current_month_records = []
+        for record in filtered_records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date and month_start <= disbursal_date <= month_end:
+                current_month_records.append(record)
+        
+        # 1. SANCTION PERFORMANCE
+        # Monthly target (from database, with fallback to request parameter)
+        monthly_target_param = request.GET.get('monthly_target')
+        if monthly_target_param:
+            try:
+                # If provided in request, save to database and use it
+                target_amount = str(monthly_target_param).replace(',', '')  # Remove commas
+                target_obj = MonthlyTarget.set_current_month_target(target_amount)
+                monthly_target = target_obj.target_amount
+            except (ValueError, InvalidOperation):
+                # Fallback to database value
+                db_target = MonthlyTarget.get_current_month_target()
+                monthly_target = Decimal(str(db_target)) if db_target and db_target > 0 else Decimal('80000000')
+        else:
+            # Get from database, with default fallback
+            db_target = MonthlyTarget.get_current_month_target()
+            monthly_target = Decimal(str(db_target)) if db_target and db_target > 0 else Decimal('80000000')  # ₹8,00,00,000 default
+        
+        # Today's disbursement
+        today_disbursement = Decimal('0')
+        for record in current_month_records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date == today:
+                today_disbursement += safe_decimal_conversion(record.get('net_disbursal', 0))
+        
+        # Total achieved till today
+        total_achieved = Decimal('0')
+        for record in current_month_records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date <= today:
+                total_achieved += safe_decimal_conversion(record.get('net_disbursal', 0))
+        
+        # Calculate metrics
+        achievement_percentage = float((total_achieved / monthly_target) * 100) if monthly_target > 0 else 0
+        yet_to_achieve = monthly_target - total_achieved
+        yet_to_achieve_percentage = float((yet_to_achieve / monthly_target) * 100) if monthly_target > 0 else 0
+        
+        days_completed = today.day
+        remaining_days = days_in_month - days_completed
+        
+        # Current daily performance (average so far)
+        current_daily_performance = total_achieved / days_completed if days_completed > 0 else Decimal('0')
+        
+        # Required daily performance to meet target
+        required_daily_performance = yet_to_achieve / remaining_days if remaining_days > 0 else Decimal('0')
+        
+        sanction_performance = {
+            'monthly_target': float(monthly_target),
+            'today_disbursement': float(today_disbursement),
+            'total_achieved': float(total_achieved),
+            'achievement_percentage': round(achievement_percentage, 2),
+            'yet_to_achieve': float(yet_to_achieve),
+            'yet_to_achieve_percentage': round(yet_to_achieve_percentage, 2),
+            'days_completed': days_completed,
+            'remaining_days': remaining_days,
+            'current_daily_performance': float(current_daily_performance),
+            'required_daily_performance': float(required_daily_performance)
+        }
+        
+        # 2. COLLECTION EFFICIENCY
+        # Current month collection efficiency
+        total_repayment_amount = Decimal('0')
+        total_collected_amount = Decimal('0')
+        
+        for record in current_month_records:
+            total_repayment_amount += safe_decimal_conversion(record.get('repayment_amount', 0))
+            total_collected_amount += safe_decimal_conversion(record.get('total_received', 0))
+        
+        current_collection_efficiency = float((total_collected_amount / total_repayment_amount) * 100) if total_repayment_amount > 0 else 0
+        
+        # Benchmark collection efficiency (configurable)
+        benchmark_efficiency = 85  # 85% benchmark
+        
+        collection_efficiency = {
+            'current_month_efficiency': round(current_collection_efficiency, 2),
+            'benchmark_efficiency': benchmark_efficiency
+        }
+        
+        # 3. HISTORICAL COLLECTION EFFICIENCY
+        # Calculate for last 4 months
+        historical_data = []
+        
+        for i in range(4):
+            # Calculate month and year for historical data
+            if current_month - i > 0:
+                hist_month = current_month - i
+                hist_year = current_year
+            else:
+                hist_month = 12 + (current_month - i)
+                hist_year = current_year - 1
+            
+            hist_month_start = datetime(hist_year, hist_month, 1).date()
+            hist_days_in_month = calendar.monthrange(hist_year, hist_month)[1]
+            hist_month_end = datetime(hist_year, hist_month, hist_days_in_month).date()
+            
+            # Filter records for historical month
+            hist_records = []
+            for record in filtered_records:
+                disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+                if disbursal_date and hist_month_start <= disbursal_date <= hist_month_end:
+                    hist_records.append(record)
+            
+            # Calculate collection efficiency for historical month
+            hist_repayment = Decimal('0')
+            hist_collected = Decimal('0')
+            
+            for record in hist_records:
+                hist_repayment += safe_decimal_conversion(record.get('repayment_amount', 0))
+                hist_collected += safe_decimal_conversion(record.get('total_received', 0))
+            
+            hist_efficiency = float((hist_collected / hist_repayment) * 100) if hist_repayment > 0 else 0
+            
+            # Set benchmark based on month (example logic)
+            hist_benchmark = 85 if hist_month in [6, 7, 8, 9] else 85
+            
+            month_name = calendar.month_name[hist_month]
+            historical_data.append({
+                'month': f"{month_name}, {hist_year}",
+                'actual': round(hist_efficiency, 2),
+                'benchmark': hist_benchmark
+            })
+        
+        # Reverse to show most recent first
+        historical_data.reverse()
+        
+        return JsonResponse({
+            'sanction_performance': sanction_performance,
+            'collection_efficiency': collection_efficiency,
+            'historical_collection_efficiency': historical_data,
+            'report_date': today.strftime('%d-%b-%y'),
+            'position_as_on': (today - timedelta(days=1)).strftime('%d-%b-%y')
         })
         
     except Exception as e:
-        logger.error(f"Error fetching loan count KPI data: {e}")
+        logger.error(f"Error fetching daily performance metrics: {e}")
         return JsonResponse({'error': 'Failed to fetch data'}, status=500)
+

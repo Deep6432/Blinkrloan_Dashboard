@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import LoanRecord
+from .models import LoanRecord, MonthlyTarget
 
 
 @admin.register(LoanRecord)
@@ -37,3 +37,15 @@ class LoanRecordAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(MonthlyTarget)
+class MonthlyTargetAdmin(admin.ModelAdmin):
+    list_display = ['month', 'year', 'target_amount', 'created_at', 'updated_at']
+    list_filter = ['month', 'year']
+    search_fields = ['month', 'year']
+    readonly_fields = ['created_at', 'updated_at']
+    list_per_page = 12
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).order_by('-year', '-month')
