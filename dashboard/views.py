@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import never_cache
 from django.db.models import Sum, Count, Avg, Q
 from django.db.models.functions import TruncDate
 from django.core.paginator import Paginator
@@ -21,6 +22,18 @@ import requests
 
 from .models import LoanRecord, MonthlyTarget
 from .services import DataSyncService
+
+
+# Decorator to add no-cache headers to API responses
+def no_cache_api(view_func):
+    """Decorator to prevent caching of API responses"""
+    def wrapped_view(request, *args, **kwargs):
+        response = view_func(request, *args, **kwargs)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+    return wrapped_view
 
 
 def parse_datetime_safely(datetime_str):
@@ -541,6 +554,7 @@ def calculate_kpis(queryset):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_dpd_buckets(request):
     """API endpoint for DPD bucket data from Collection WITH Fraud API"""
     try:
@@ -617,6 +631,7 @@ def api_state_repayment(request):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_kpi_data(request):
     """API endpoint for KPI data - now uses Collection WITH Fraud API directly"""
     try:
@@ -815,6 +830,7 @@ def api_city_uncollected(request):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_time_series(request):
     """API endpoint for time series data from Collection WITH Fraud API"""
     try:
@@ -898,6 +914,7 @@ def sync_data(request):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_dpd_bucket_details(request):
     """API endpoint for detailed DPD bucket data from Collection WITH Fraud API"""
     try:
@@ -1511,6 +1528,7 @@ def apply_fraud_filters(records, request):
     return records
 
 # Fraud Summary API endpoints (using portfolio-collection-without-fraud API)
+@no_cache_api
 def api_fraud_kpi_data(request):
     """API endpoint for fraud summary KPI data"""
     try:
@@ -1640,6 +1658,7 @@ def api_fraud_kpi_data(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
 def api_fraud_dpd_buckets(request):
     """API endpoint for fraud summary DPD bucket data from Collection WITHOUT Fraud API"""
     try:
@@ -1747,6 +1766,7 @@ def api_fraud_state_repayment(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
 def api_fraud_time_series(request):
     """API endpoint for fraud summary time series data"""
     try:
