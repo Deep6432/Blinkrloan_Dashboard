@@ -675,9 +675,9 @@ def api_kpi_data(request):
         # Calculate KPIs from filtered records
         kpi_data = calculate_kpi_from_records(filtered_records)
 
-        # Extract filter options for dropdowns from FILTERED records (not original records)
+        # Extract filter options for dropdowns from FILTERED records (use actual city names, not normalized)
         unique_states = sorted(list(set(record.get('state', '') for record in filtered_records if record.get('state'))))
-        unique_cities = sorted(list(set(record.get('city', '') for record in filtered_records if record.get('city'))))
+        unique_cities = sorted(list(set(record.get('city', '').strip() for record in filtered_records if record.get('city', '').strip())))
         all_closed_statuses = list(set(record.get('closed_status', '') for record in filtered_records if record.get('closed_status')))
         unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
         
@@ -1506,23 +1506,11 @@ def apply_fraud_filters(records, request):
         
         if city_filter:
             # If both state and city are selected, filter by both
-            # Apply city normalization for comparison
-            filtered_records = []
-            for r in records:
-                record_city = normalize_city_name(r.get('city', ''))
-                filter_city = normalize_city_name(city_filter)
-                if record_city == filter_city:
-                    filtered_records.append(r)
-            records = filtered_records
+            # Use exact match, not normalization
+            records = [r for r in records if r.get('city', '').strip() == city_filter.strip()]
     elif city_filter:
-        # If only city is selected, filter by city (with normalization)
-        filtered_records = []
-        filter_city = normalize_city_name(city_filter)
-        for r in records:
-            record_city = normalize_city_name(r.get('city', ''))
-            if record_city == filter_city:
-                filtered_records.append(r)
-        records = filtered_records
+        # If only city is selected, filter by exact city name
+        records = [r for r in records if r.get('city', '').strip() == city_filter.strip()]
     
     return records
 
@@ -1624,9 +1612,9 @@ def api_fraud_kpi_data(request):
         pending_collection = repayment_amount - collected_amount
         collection_rate = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
         
-        # Extract filter options from filtered records
+        # Extract filter options from filtered records (use actual city names, not normalized)
         unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
-        unique_cities = sorted(list(set(record.get('city', '') for record in records if record.get('city'))))
+        unique_cities = sorted(list(set(record.get('city', '').strip() for record in records if record.get('city', '').strip())))
         all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
         unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
         
