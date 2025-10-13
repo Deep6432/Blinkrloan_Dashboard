@@ -542,94 +542,60 @@ def calculate_kpis(queryset):
 
 @require_http_methods(["GET"])
 def api_dpd_buckets(request):
-    """API endpoint for DPD bucket data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-    
-    # Store the selected DPD bucket for highlighting
-    selected_dpd = request.GET.get('dpd')
-    
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for DPD bucket data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-    
-    # Define normalized DPD bucket mapping
-    dpd_bucket_mapping = {
-        '0': '0 days DPD',
-        '0-30': 'DPD 1-30',
-        'DPD 1-30': 'DPD 1-30',
-        '31-60': 'DPD 31-60',
-        'DPD 31-60': 'DPD 31-60',
-        '61-90': 'DPD 61-90',
-        'DPD 61-90': 'DPD 61-90',
-        'DPD 91-120': 'DPD 91-120',
-        'No DPD': 'No DPD'
-    }
-    
-    # Get all unique DPD buckets and normalize them
-    all_dpd_buckets = LoanRecord.objects.values_list('dpd_bucket', flat=True).distinct()
-    normalized_buckets = set()
-    
-    for bucket in all_dpd_buckets:
-        normalized_bucket = dpd_bucket_mapping.get(bucket, bucket)
-        normalized_buckets.add(normalized_bucket)
-    
-    # Group by DPD bucket with additional aggregations
-    dpd_data = queryset.values('dpd_bucket').annotate(
-        count=Count('id'),
-        total_net_disbursal=Sum('net_disbursal'),
-        total_repayment_amount=Sum('repayment_amount')
-    ).order_by('dpd_bucket')
-    
-    # Create consolidated data by normalized bucket names
-    consolidated_data = {}
-    for item in dpd_data:
-        normalized_bucket = dpd_bucket_mapping.get(item['dpd_bucket'], item['dpd_bucket'])
-        if normalized_bucket not in consolidated_data:
-            consolidated_data[normalized_bucket] = {
-                'dpd_bucket': normalized_bucket,
-                'count': 0,
-                'total_net_disbursal': 0,
-                'total_repayment_amount': 0
-            }
+        # Extract the data array
+        records = data.get('pr', [])
         
-        consolidated_data[normalized_bucket]['count'] += item['count']
-        consolidated_data[normalized_bucket]['total_net_disbursal'] += float(item['total_net_disbursal'] or 0)
-        consolidated_data[normalized_bucket]['total_repayment_amount'] += float(item['total_repayment_amount'] or 0)
-    
-    # Create final result with proper ordering
-    bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'No DPD']
-    result = []
-    
-    for bucket in bucket_order:
-        if bucket in normalized_buckets:
-            bucket_data = consolidated_data.get(bucket, {
-                'dpd_bucket': bucket,
-                'count': 0,
-                'total_net_disbursal': 0,
-                'total_repayment_amount': 0
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Store the selected DPD bucket for highlighting
+        selected_dpd = request.GET.get('dpd')
+        
+        # Group by DPD bucket
+        bucket_data = {}
+        for record in filtered_records:
+            dpd_bucket = record.get('dpd_bucket', 'Unknown')
+            if dpd_bucket not in bucket_data:
+                bucket_data[dpd_bucket] = {
+                    'dpd_bucket': dpd_bucket,
+                    'count': 0,
+                    'total_disbursal': Decimal('0'),
+                    'total_due': Decimal('0')
+                }
+            
+            bucket_data[dpd_bucket]['count'] += 1
+            bucket_data[dpd_bucket]['total_disbursal'] += Decimal(str(record.get('net_disbursal', 0)))
+            bucket_data[dpd_bucket]['total_due'] += Decimal(str(record.get('repayment_amount', 0)))
+        
+        # Convert to list and format
+        result = []
+        for bucket_info in bucket_data.values():
+            dpd_bucket = bucket_info['dpd_bucket']
+            result.append({
+                'dpd_bucket': dpd_bucket,
+                'count': bucket_info['count'],
+                'total_disbursal': float(bucket_info['total_disbursal']),
+                'total_due': float(bucket_info['total_due']),
+                'is_selected': dpd_bucket == selected_dpd if selected_dpd else False
             })
-            bucket_data['is_selected'] = (bucket == selected_dpd)
-            result.append(bucket_data)
-    
-    return JsonResponse({
-        'data': result
-    })
+        
+        # Sort by bucket name
+        result.sort(key=lambda x: x['dpd_bucket'])
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -865,8 +831,8 @@ def api_time_series(request):
 
         if not filtered_records:
             return JsonResponse({'data': []})
-        
-        # Group by repayment date
+    
+    # Group by repayment date
         date_data = {}
         for record in filtered_records:
             repayment_date_str = record.get('repayment_date')
@@ -933,117 +899,113 @@ def sync_data(request):
 
 @require_http_methods(["GET"])
 def api_dpd_bucket_details(request):
-    """API endpoint for detailed DPD bucket data"""
-    from django.core.paginator import Paginator, EmptyPage
-    from django.db import models
-    
-    dpd_bucket = request.GET.get('dpd_bucket')
-    search = request.GET.get('search', '')
-    page = int(request.GET.get('page', 1))
-    per_page = int(request.GET.get('per_page', 20))
-    sort_by = request.GET.get('sort_by', 'overdue_days')
-    sort_order = request.GET.get('sort_order', 'desc')
-    
-    if not dpd_bucket:
-        return JsonResponse({'error': 'DPD bucket is required'}, status=400)
-    
-    # Start with all records
-    queryset = LoanRecord.objects.all()
-    
-    # Apply DPD bucket filter - handle normalized bucket names
-    dpd_bucket_mapping = {
-        '0 days DPD': ['0'],
-        'DPD 1-30': ['0-30', 'DPD 1-30'],
-        'DPD 31-60': ['31-60', 'DPD 31-60'],
-        'DPD 61-90': ['61-90', 'DPD 61-90'],
-        'DPD 91-120': ['DPD 91-120'],
-        'No DPD': ['No DPD']
-    }
-    
-    # Get the original bucket names for the normalized bucket
-    original_buckets = dpd_bucket_mapping.get(dpd_bucket, [dpd_bucket])
-    queryset = queryset.filter(dpd_bucket__in=original_buckets)
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    # Apply other filters (same as main dashboard)
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-    
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-    
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
-        
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-    
-    # Apply search filter
-    if search:
-        queryset = queryset.filter(
-            models.Q(loan_no__icontains=search) | 
-            models.Q(pan__icontains=search)
-        )
-    
-    # Apply sorting
-    if sort_order == 'desc':
-        sort_by = f'-{sort_by}'
-    queryset = queryset.order_by(sort_by)
-    
-    # Calculate totals before pagination
-    totals = queryset.aggregate(
-        total_net_disbursal=Sum('net_disbursal'),
-        total_repayment_amount=Sum('repayment_amount')
-    )
-    
-    # Apply pagination
-    paginator = Paginator(queryset, per_page)
+    """API endpoint for detailed DPD bucket data from Collection WITH Fraud API"""
     try:
-        page_obj = paginator.page(page)
-    except EmptyPage:
-        page_obj = paginator.page(1)
-    
-    # Format the data
-    records = []
-    for record in page_obj:
-        records.append({
-            'loan_no': record.loan_no,
-            'pan': record.pan.upper() if record.pan else '',
-            'disbursal_date': record.disbursal_date.strftime('%d/%m/%Y') if record.disbursal_date else '—',
-            'net_disbursal': float(record.net_disbursal or 0),
-            'repayment_date': record.repayment_date.strftime('%d/%m/%Y') if record.repayment_date else '—',
-            'repayment_amount': float(record.repayment_amount or 0),
-            'overdue_days': record.overdue_days,
-            'dpd_bucket': record.dpd_bucket,
+        dpd_bucket = request.GET.get('dpd_bucket')
+        search = request.GET.get('search', '')
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 20))
+        sort_by = request.GET.get('sort_by', 'overdue_days')
+        sort_order = request.GET.get('sort_order', 'desc')
+        
+        if not dpd_bucket:
+            return JsonResponse({'error': 'DPD bucket is required'}, status=400)
+        
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records (date range, state, city, closing status, etc.)
+        filtered_records = apply_fraud_filters(records, request)
+        
+        # Filter by DPD bucket
+        bucket_filtered_records = [r for r in filtered_records if r.get('dpd_bucket') == dpd_bucket]
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            bucket_filtered_records = [
+                r for r in bucket_filtered_records 
+                if (search_lower in str(r.get('loan_no', '')).lower() or 
+                    search_lower in str(r.get('pan', '')).lower())
+            ]
+        
+        # Calculate totals
+        total_net_disbursal = sum(Decimal(str(r.get('net_disbursal', 0))) for r in bucket_filtered_records)
+        total_repayment_amount = sum(Decimal(str(r.get('repayment_amount', 0))) for r in bucket_filtered_records)
+        
+        # Sort records
+        reverse = (sort_order == 'desc')
+        if sort_by == 'overdue_days':
+            bucket_filtered_records.sort(key=lambda x: int(x.get('overdue_days', 0)), reverse=reverse)
+        elif sort_by == 'net_disbursal':
+            bucket_filtered_records.sort(key=lambda x: float(x.get('net_disbursal', 0)), reverse=reverse)
+        elif sort_by == 'repayment_amount':
+            bucket_filtered_records.sort(key=lambda x: float(x.get('repayment_amount', 0)), reverse=reverse)
+        elif sort_by == 'loan_no':
+            bucket_filtered_records.sort(key=lambda x: str(x.get('loan_no', '')), reverse=reverse)
+        
+        # Calculate pagination
+        total_records = len(bucket_filtered_records)
+        total_pages = (total_records + per_page - 1) // per_page if total_records > 0 else 1
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        page_records = bucket_filtered_records[start_idx:end_idx]
+        
+        # Format the data
+        formatted_records = []
+        for record in page_records:
+            disbursal_date_str = record.get('disbursal_date')
+            repayment_date_str = record.get('repayment_date')
+            
+            # Parse and format dates
+            disbursal_date_formatted = '—'
+            if disbursal_date_str:
+                parsed_date = parse_datetime_safely(disbursal_date_str)
+                if parsed_date:
+                    disbursal_date_formatted = parsed_date.strftime('%d/%m/%Y')
+            
+            repayment_date_formatted = '—'
+            if repayment_date_str:
+                parsed_date = parse_datetime_safely(repayment_date_str)
+                if parsed_date:
+                    repayment_date_formatted = parsed_date.strftime('%d/%m/%Y')
+            
+            formatted_records.append({
+                'loan_no': record.get('loan_no', ''),
+                'pan': str(record.get('pan', '')).upper() if record.get('pan') else '',
+                'disbursal_date': disbursal_date_formatted,
+                'net_disbursal': float(record.get('net_disbursal', 0)),
+                'repayment_date': repayment_date_formatted,
+                'repayment_amount': float(record.get('repayment_amount', 0)),
+                'overdue_days': int(record.get('overdue_days', 0)),
+                'dpd_bucket': record.get('dpd_bucket', ''),
+            })
+        
+        return JsonResponse({
+            'records': formatted_records,
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_records': total_records,
+                'per_page': per_page,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+            },
+            'totals': {
+                'total_net_disbursal': float(total_net_disbursal),
+                'total_repayment_amount': float(total_repayment_amount),
+            },
+            'dpd_bucket': dpd_bucket,
+            'search': search,
         })
-    
-    return JsonResponse({
-        'records': records,
-        'pagination': {
-            'current_page': page_obj.number,
-            'total_pages': paginator.num_pages,
-            'total_records': paginator.count,
-            'per_page': per_page,
-            'has_next': page_obj.has_next(),
-            'has_previous': page_obj.has_previous(),
-        },
-        'totals': {
-            'total_net_disbursal': float(totals['total_net_disbursal'] or 0),
-            'total_repayment_amount': float(totals['total_repayment_amount'] or 0),
-        },
-        'dpd_bucket': dpd_bucket,
-        'search': search,
-    })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # Authentication Views
@@ -1679,7 +1641,7 @@ def api_fraud_kpi_data(request):
 
 
 def api_fraud_dpd_buckets(request):
-    """API endpoint for fraud summary DPD bucket data"""
+    """API endpoint for fraud summary DPD bucket data from Collection WITHOUT Fraud API"""
     try:
         # Fetch data from the without-fraud API
         response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
@@ -1690,14 +1652,17 @@ def api_fraud_dpd_buckets(request):
         records = data.get('cwpr', [])
         
         # Apply filters if provided
-        records = apply_fraud_filters(records, request)
+        filtered_records = apply_fraud_filters(records, request)
         
-        if not records:
+        if not filtered_records:
             return JsonResponse({'buckets': []})
+        
+        # Store the selected DPD bucket for highlighting
+        selected_dpd = request.GET.get('dpd')
         
         # Group by DPD bucket
         bucket_data = {}
-        for record in records:
+        for record in filtered_records:
             dpd_bucket = record.get('dpd_bucket', 'Unknown')
             if dpd_bucket not in bucket_data:
                 bucket_data[dpd_bucket] = {

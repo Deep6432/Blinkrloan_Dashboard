@@ -2613,28 +2613,28 @@ function setupAutoRefresh() {
             // Refresh based on active tab
             if (activeTab === 'collection') {
                 // Refresh Collection WITH Fraud tab
-                const currentUrl = new URL(window.location);
-                const currentParams = currentUrl.searchParams;
-                const params = new URLSearchParams();
-                
-                // Preserve all current filter parameters
-                for (const [key, value] of currentParams.entries()) {
-                    if (value) {
-                        params.set(key, value);
-                    }
+            const currentUrl = new URL(window.location);
+            const currentParams = currentUrl.searchParams;
+            const params = new URLSearchParams();
+            
+            // Preserve all current filter parameters
+            for (const [key, value] of currentParams.entries()) {
+                if (value) {
+                    params.set(key, value);
                 }
-                
-                const filterParams = Object.fromEntries(params.entries());
-                const paramsString = params.toString();
-                await Promise.all([
-                    refreshKPIData(paramsString),
-                    loadDPDBucketData(filterParams),
-                    loadStateRepaymentChart(filterParams),
-                    loadTimeSeriesChart(filterParams),
-                    loadCityCollectedChart(filterParams),
-                    loadCityUncollectedChart(filterParams)
-                ]);
-                
+            }
+            
+            const filterParams = Object.fromEntries(params.entries());
+            const paramsString = params.toString();
+            await Promise.all([
+                refreshKPIData(paramsString),
+                loadDPDBucketData(filterParams),
+                loadStateRepaymentChart(filterParams),
+                loadTimeSeriesChart(filterParams),
+                loadCityCollectedChart(filterParams),
+                loadCityUncollectedChart(filterParams)
+            ]);
+            
                 console.log('Collection with Fraud tab data refreshed successfully');
                 
             } else if (activeTab === 'fraud') {
