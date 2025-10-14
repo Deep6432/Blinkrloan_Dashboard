@@ -535,6 +535,52 @@ if (window.history.replaceState) {
                     </div>
                 </div>
             </div>
+
+            <!-- Principal Outstanding Excluding 120+ Days DPD (Recovery %) Card -->
+            <div class="kpi-card relative group">
+                <!-- Hover Tooltip -->
+          <div class="absolute -top-2 left-1/2 transform -translate-x-1/2 -translate-y-full bg-gray-900 text-white text-xs rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10 shadow-xl border border-gray-700">
+              Excludes long overdue (90+ DPD) accounts. Indicates near-term recovery health.
+                    <div class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                        <div class="border-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="p-1.5 rounded-md bg-blue-500/10 border border-blue-500/20">
+                        <svg class="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <div class="text-sm text-blue-400">Principal Collection Excl. 90+ DPD</div>
+                </div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-3xl font-semibold text-blue-400" id="recoverableAmountExcl90" data-amount="{{ kpis.recoverable_amount_excl_90|default:0 }}"></div>
+                    <div class="text-sm text-blue-300"><span id="recoveryPercentageExcl90">{{ kpis.recovery_percentage_excl_90|default:0|floatformat:2 }}</span>% Recovery</div>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span class="text-gray-300">Fresh</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="freshRecoverableExcl90" data-amount="{{ kpis.fresh_recoverable_excl_90|default:0 }}"></span>
+                            <span class="text-xs text-gray-400 ml-2">(<span id="freshRecoveryPercentageExcl90">{{ kpis.fresh_recovery_percentage_excl_90|default:0|floatformat:2 }}</span>% Recovery)</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <span class="text-gray-300">Reloan</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="reloanRecoverableExcl90" data-amount="{{ kpis.reloan_recoverable_excl_90|default:0 }}"></span>
+                            <span class="text-xs text-gray-400 ml-2">(<span id="reloanRecoveryPercentageExcl90">{{ kpis.reloan_recovery_percentage_excl_90|default:0|floatformat:2 }}</span>% Recovery)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Mobile Responsive Enhanced Analytics Charts -->
@@ -2857,6 +2903,39 @@ async function refreshKPIData(params) {
             const reloanPrincipalOutstandingElement = document.getElementById('reloanPrincipalOutstanding');
             if (reloanPrincipalOutstandingElement) {
                 reloanPrincipalOutstandingElement.textContent = formatCurrency(kpis.reloan_principal_outstanding);
+            }
+            
+            // Update Principal Outstanding Excluding 90+ DPD (Recovery %)
+            const recoverableAmountExcl90Element = document.getElementById('recoverableAmountExcl90');
+            if (recoverableAmountExcl90Element) {
+                recoverableAmountExcl90Element.textContent = formatCurrency(kpis.recoverable_amount_excl_90);
+            }
+            
+            const recoveryPercentageExcl90Element = document.getElementById('recoveryPercentageExcl90');
+            if (recoveryPercentageExcl90Element) {
+                recoveryPercentageExcl90Element.textContent = kpis.recovery_percentage_excl_90.toFixed(2);
+            }
+            
+            // Update Fresh Recoverable Amount Excl. 90+ DPD
+            const freshRecoverableExcl90Element = document.getElementById('freshRecoverableExcl90');
+            if (freshRecoverableExcl90Element) {
+                freshRecoverableExcl90Element.textContent = formatCurrency(kpis.fresh_recoverable_excl_90);
+            }
+            
+            const freshRecoveryPercentageExcl90Element = document.getElementById('freshRecoveryPercentageExcl90');
+            if (freshRecoveryPercentageExcl90Element) {
+                freshRecoveryPercentageExcl90Element.textContent = kpis.fresh_recovery_percentage_excl_90.toFixed(2);
+            }
+            
+            // Update Reloan Recoverable Amount Excl. 90+ DPD
+            const reloanRecoverableExcl90Element = document.getElementById('reloanRecoverableExcl90');
+            if (reloanRecoverableExcl90Element) {
+                reloanRecoverableExcl90Element.textContent = formatCurrency(kpis.reloan_recoverable_excl_90);
+            }
+            
+            const reloanRecoveryPercentageExcl90Element = document.getElementById('reloanRecoveryPercentageExcl90');
+            if (reloanRecoveryPercentageExcl90Element) {
+                reloanRecoveryPercentageExcl90Element.textContent = kpis.reloan_recovery_percentage_excl_90.toFixed(2);
             }
         }
         
