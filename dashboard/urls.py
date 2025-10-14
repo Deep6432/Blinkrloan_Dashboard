@@ -28,6 +28,4 @@ urlpatterns = [
     path('api/fraud/total-applications-details/', views.api_fraud_total_applications_details, name='api_fraud_total_applications_details'),
     # Loan Count Wise API endpoint
     path('api/loan-count-wise/', views.api_loan_count_wise, name='api_loan_count_wise'),
-    # Daily Performance Metrics API endpoints
-    path('api/daily-performance/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
 ]

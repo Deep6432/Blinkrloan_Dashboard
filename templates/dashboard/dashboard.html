@@ -2672,9 +2672,8 @@ function setupAutoRefresh() {
                 console.log('Collection without Fraud tab data refreshed successfully');
                 
             } else if (activeTab === 'dailyPerformance') {
-                // Refresh Daily Performance tab
-                await loadDailyPerformanceData();
-                console.log('Daily Performance tab data refreshed successfully');
+                // Daily Performance tab - static UI only (no refresh needed)
+                console.log('Daily Performance tab - static UI, no refresh');
                 
             } else if (activeTab === 'loanCount') {
                 // Refresh Loan Count Wise tab
@@ -3525,8 +3524,7 @@ function switchTab(tabName) {
     
     // Initialize daily performance tab if it's being switched to
     if (tabName === 'dailyPerformance') {
-        console.log('Switching to daily performance tab, initializing...');
-        loadDailyPerformanceData();
+        console.log('Switching to daily performance tab - static UI only');
     }
     
     // Initialize loan count tab if it's being switched to
@@ -5044,21 +5042,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="space-y-4">
                             <div class="flex justify-between items-center py-2 border-b border-gray-700">
                                 <span class="text-gray-300">Target of Sanction for the current Month:</span>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-white">₹</span>
-                                    <input 
-                                        type="text" 
-                                        id="monthlyTarget" 
-                                        class="monthly-target-input bg-transparent border-none text-white font-semibold w-32 text-right focus:outline-none focus:ring-0 focus:border-transparent cursor-pointer hover:bg-gray-700 hover:border hover:border-gray-600 hover:rounded hover:px-3 hover:py-1 transition-all duration-200"
-                                        placeholder="Click to set target"
-                                        oninput="formatNumberInput(this)"
-                                        onkeyup="formatNumberInput(this)"
-                                        onchange="updateMonthlyTarget(this.value)"
-                                        onfocus="showInputStyle(this)"
-                                        onblur="hideInputStyle(this)"
-                                        onclick="this.select()"
-                                    />
-                                </div>
+                                <span class="text-white font-semibold">₹ <span id="monthlyTarget">--</span></span>
                             </div>
                             <div class="flex justify-between items-center py-2 border-b border-gray-700">
                                 <span class="text-gray-300">Today's Disbursement:</span>
@@ -5219,274 +5203,6 @@ window.clearSavedTab = function() {
     localStorage.removeItem('activeTab');
     console.log('Saved tab cleared. Refresh the page to see the default tab.');
 };
-
-// Load Daily Performance Metrics Data
-async function loadDailyPerformanceData() {
-    try {
-        console.log('Loading daily performance metrics data...');
-        
-        // Get current filter values from the form
-        const filterForm = document.getElementById('filterForm');
-        const formData = new FormData(filterForm);
-        const params = new URLSearchParams();
-        
-        // Add current filter values
-        for (const [key, value] of formData.entries()) {
-            if (value && value.trim() !== '') {
-                params.append(key, value);
-            }
-        }
-        
-        const response = await fetch(`/api/daily-performance/?${params}`);
-        const data = await response.json();
-        
-        console.log('Daily performance data loaded:', data);
-        
-        // Update report dates
-        document.getElementById('reportDate').textContent = data.report_date || '--';
-        document.getElementById('positionDate').textContent = data.position_as_on || '--';
-        
-        // Update Sanction Performance section
-        const sanction = data.sanction_performance;
-        const monthlyTargetInput = document.getElementById('monthlyTarget');
-        
-        // Only update monthly target if user is NOT currently editing it
-        if (document.activeElement !== monthlyTargetInput) {
-            // Format and set the monthly target value
-            console.log('Monthly target from API:', sanction.monthly_target);
-            const formattedTarget = formatIndianNumber(sanction.monthly_target.toString());
-            console.log('Formatted target:', formattedTarget);
-            monthlyTargetInput.value = formattedTarget;
-            
-            // Apply normal text styling since it has a value
-            if (monthlyTargetInput.value && monthlyTargetInput.value !== '0') {
-                hideInputStyle(monthlyTargetInput);
-            }
-        } else {
-            console.log('Skipping monthly target update - user is editing');
-        }
-        document.getElementById('todayDisbursement').textContent = formatNumber(sanction.today_disbursement);
-        document.getElementById('totalAchieved').textContent = formatNumber(sanction.total_achieved);
-        document.getElementById('achievementPercentage').textContent = sanction.achievement_percentage.toFixed(1);
-        document.getElementById('yetToAchieve').textContent = formatNumber(sanction.yet_to_achieve);
-        document.getElementById('yetToAchievePercentage').textContent = sanction.yet_to_achieve_percentage.toFixed(1);
-        document.getElementById('daysCompleted').textContent = sanction.days_completed;
-        document.getElementById('remainingDays').textContent = sanction.remaining_days;
-        document.getElementById('currentDailyPerformance').textContent = formatNumber(sanction.current_daily_performance);
-        document.getElementById('requiredDailyPerformance').textContent = formatNumber(sanction.required_daily_performance);
-        
-        // Update Collection Efficiency section
-        const collection = data.collection_efficiency;
-        const currentEfficiency = document.getElementById('currentCollectionEfficiency');
-        currentEfficiency.textContent = collection.current_month_efficiency.toFixed(1) + '%';
-        
-        // Change background color based on performance
-        if (collection.current_month_efficiency >= collection.benchmark_efficiency) {
-            currentEfficiency.className = 'text-white font-semibold px-3 py-1 rounded bg-green-600';
-        } else {
-            currentEfficiency.className = 'text-white font-semibold px-3 py-1 rounded bg-red-600';
-        }
-        
-        document.getElementById('benchmarkEfficiency').textContent = collection.benchmark_efficiency;
-        
-        // Update Historical Collection Efficiency section
-        const historicalTable = document.getElementById('historicalDataTable');
-        historicalTable.innerHTML = '';
-        
-        data.historical_collection_efficiency.forEach(item => {
-            const row = document.createElement('tr');
-            row.className = 'border-b border-gray-700';
-            
-            // Determine background color for actual performance
-            let actualBgClass = 'px-3 py-1 rounded';
-            if (item.actual >= item.benchmark) {
-                actualBgClass += ' bg-green-600 text-white';
-            } else {
-                actualBgClass += ' bg-red-600 text-white';
-            }
-            
-            row.innerHTML = `
-                <td class="py-3 px-4 text-gray-300">${item.month}</td>
-                <td class="py-3 px-4 text-right">
-                    <span class="font-semibold ${actualBgClass}">${item.actual.toFixed(1)}%</span>
-                </td>
-                <td class="py-3 px-4 text-right text-white font-semibold">${item.benchmark}%</td>
-            `;
-            
-            historicalTable.appendChild(row);
-        });
-        
-        console.log('Daily performance metrics updated successfully');
-        
-    } catch (error) {
-        console.error('Error loading daily performance metrics:', error);
-        // Show error state or fallback data
-        document.getElementById('reportDate').textContent = 'Error';
-        document.getElementById('positionDate').textContent = 'Error';
-    }
-}
-
-// Format number input with comma separators (Indian format)
-function formatNumberInput(input) {
-    // Remove all non-digit characters
-    let value = input.value.replace(/[^\d]/g, '');
-    
-    // Add commas for thousands separators (Indian format)
-    if (value.length > 0) {
-        value = formatIndianNumber(value);
-    }
-    
-    // Update the input value
-    input.value = value;
-}
-
-// Simple Indian number formatting function using regex
-function formatIndianNumber(numStr) {
-    // Remove any existing commas
-    numStr = numStr.replace(/,/g, '');
-    
-    // Handle empty or very small numbers
-    if (!numStr || numStr.length <= 3) {
-        return numStr;
-    }
-    
-    // Convert to number to ensure it's valid
-    const num = parseInt(numStr);
-    if (isNaN(num)) {
-        return numStr;
-    }
-    
-    // Use regex to format Indian style: groups of 2 from right, except last 3
-    // This regex will match: last 3 digits, then groups of 2 digits from right to left
-    return numStr.replace(/(\d)(?=(\d{2})*(\d{3})$)/g, '$1,');
-}
-
-// Debug function to test formatting (can be called from browser console)
-window.testFormatting = function() {
-    console.log('Testing formatting...');
-    
-    // Test multiple values
-    const testValues = ['80000000', '100000000', '150000000', '1000000', '100000'];
-    
-    testValues.forEach(value => {
-        console.log(`Testing ${value}:`);
-        const result = formatIndianNumber(value);
-        console.log(`Result: ${result}`);
-    });
-    
-    // Test the input field directly
-    const input = document.getElementById('monthlyTarget');
-    if (input) {
-        console.log('Testing input field...');
-        input.value = '80000000';
-        console.log('Before formatting:', input.value);
-        formatNumberInput(input);
-        console.log('After formatting:', input.value);
-    } else {
-        console.log('Input field not found!');
-    }
-    
-    console.log('Test completed. Check console for results.');
-}
-
-// Quick test function for immediate testing
-window.quickTest = function() {
-    const input = document.getElementById('monthlyTarget');
-    if (input) {
-        input.value = '80000000';
-        formatNumberInput(input);
-        console.log('Quick test result:', input.value);
-    }
-}
-
-// Show input styling when focused
-function showInputStyle(input) {
-    input.classList.remove('bg-transparent', 'border-none');
-    input.classList.add('bg-gray-700', 'border', 'border-gray-600', 'rounded', 'px-3', 'py-1');
-}
-
-// Hide input styling when not focused (make it look like normal text)
-function hideInputStyle(input) {
-    if (input.value && input.value.trim() !== '') {
-        input.classList.remove('bg-gray-700', 'border', 'border-gray-600', 'rounded', 'px-3', 'py-1');
-        input.classList.add('bg-transparent', 'border-none');
-    }
-}
-
-// Update monthly target and recalculate metrics
-async function updateMonthlyTarget(newTarget) {
-    try {
-        // Remove commas and convert to number
-        const numericTarget = newTarget.replace(/,/g, '');
-        console.log('Updating monthly target to:', numericTarget);
-        
-        // First, save the target to database via POST request
-        const saveResponse = await fetch('/api/daily-performance/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({
-                monthly_target: numericTarget
-            })
-        });
-        
-        const saveData = await saveResponse.json();
-        if (saveData.success) {
-            console.log('Target saved to database:', saveData.message);
-        } else {
-            console.error('Failed to save target:', saveData.message);
-            return;
-        }
-        
-        // Then fetch updated data with current filters
-        const filterForm = document.getElementById('filterForm');
-        const formData = new FormData(filterForm);
-        const params = new URLSearchParams();
-        
-        // Add current filter values
-        for (const [key, value] of formData.entries()) {
-            if (value && value.trim() !== '') {
-                params.append(key, value);
-            }
-        }
-        
-        const response = await fetch(`/api/daily-performance/?${params}`);
-        const data = await response.json();
-        
-        console.log('Updated daily performance data:', data);
-        
-        // Update only the sanction performance metrics that depend on the target
-        const sanction = data.sanction_performance;
-        document.getElementById('achievementPercentage').textContent = sanction.achievement_percentage.toFixed(1);
-        document.getElementById('yetToAchieve').textContent = formatNumber(sanction.yet_to_achieve);
-        document.getElementById('yetToAchievePercentage').textContent = sanction.yet_to_achieve_percentage.toFixed(1);
-        document.getElementById('requiredDailyPerformance').textContent = formatNumber(sanction.required_daily_performance);
-        
-        console.log('Monthly target updated successfully');
-        
-    } catch (error) {
-        console.error('Error updating monthly target:', error);
-    }
-}
-
-// Helper function to get CSRF token
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
 
 
 // ===============================
