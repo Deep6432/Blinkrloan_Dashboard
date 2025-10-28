@@ -944,11 +944,20 @@ def api_time_series(request):
                             date_data[date_key] = {
                                 'date': date_key,
                                 'repayment_amount': Decimal('0'),
-                                'collected_amount': Decimal('0')
+                                'collected_amount': Decimal('0'),
+                                'collected_cases': 0,
+                                'pending_cases': 0
                             }
                         
                         date_data[date_key]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
                         date_data[date_key]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+                        
+                        # Count cases - a case is collected if total_received > 0, otherwise pending
+                        total_received = Decimal(str(record.get('total_received', 0)))
+                        if total_received > 0:
+                            date_data[date_key]['collected_cases'] += 1
+                        else:
+                            date_data[date_key]['pending_cases'] += 1
                 except:
                     continue
         
@@ -957,11 +966,15 @@ def api_time_series(request):
         for date_info in date_data.values():
             repayment_amount = float(date_info['repayment_amount'])
             collected_amount = float(date_info['collected_amount'])
+            pending_amount = repayment_amount - collected_amount
             collection_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
             time_series_data.append({
                 'date': date_info['date'],
                 'repayment_amount': repayment_amount,
                 'collected_amount': collected_amount,
+                'pending_amount': pending_amount,
+                'collected_cases': date_info['collected_cases'],
+                'pending_cases': date_info['pending_cases'],
                 'collection_percentage': collection_percentage
             })
         

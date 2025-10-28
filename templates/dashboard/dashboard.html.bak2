@@ -611,8 +611,12 @@ if (window.history.replaceState) {
                     <canvas id="stateChart"></canvas>
                 </div>
                 
-                <!-- State Chart Indicators (3 cards) -->
-                <div class="grid grid-cols-3 gap-4 items-stretch">
+            </div>
+            
+            <!-- Shared Indicators Row for Both Charts (6 cards in total) -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 mt-6">
+                <!-- Left Column: Cards for State Chart -->
+                <div class="grid grid-cols-3 gap-4">
                     <!-- Total Applications -->
                     <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex flex-col justify-between min-h-[120px]">
                         <div class="flex items-center gap-2 mb-2">
@@ -620,6 +624,7 @@ if (window.history.replaceState) {
                             <span class="text-xs text-blue-400 font-medium">Total Applications</span>
                         </div>
                         <div class="text-2xl font-bold text-blue-400" id="timeseriesTotalApplications">0</div>
+                        <div class="text-xs opacity-0">-</div>
                     </div>
                     
                     <!-- Repayment Amount -->
@@ -642,7 +647,41 @@ if (window.history.replaceState) {
                         <div class="text-xs opacity-0">-</div>
                     </div>
                 </div>
+                
+                <!-- Right Column: Cards for Time Series Chart -->
+                <div class="grid grid-cols-3 gap-4">
+                    <!-- Collected Cases -->
+                    <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4 flex flex-col justify-between min-h-[120px]">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span class="text-xs text-green-400 font-medium">Collected Cases</span>
+                        </div>
+                        <div class="text-2xl font-bold text-green-400" id="timeseriesCollectedCases">0</div>
+                        <div class="text-xs text-green-300 mt-1" id="timeseriesCollectedCasesPercent">-</div>
+                    </div>
+                    
+                    <!-- Pending Amount -->
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex flex-col justify-between min-h-[120px]">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span class="text-xs text-red-400 font-medium">Pending Amount</span>
+                        </div>
+                        <div class="text-2xl font-bold text-red-400" id="timeseriesPendingAmount">₹0</div>
+                        <div class="text-xs opacity-0">-</div>
+                    </div>
+                    
+                    <!-- Pending Cases -->
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex flex-col justify-between min-h-[120px]">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span class="text-xs text-red-400 font-medium">Pending Cases</span>
+                        </div>
+                        <div class="text-2xl font-bold text-red-400" id="timeseriesPendingCases">0</div>
+                        <div class="text-xs text-red-300 mt-1" id="timeseriesPendingCasesPercent">-</div>
+                    </div>
+                </div>
             </div>
+        </div>
 
             <!-- Enhanced Time Series Chart -----> 
             <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl">
@@ -702,46 +741,6 @@ if (window.history.replaceState) {
                     </div>
                 </div>
                 
-            </div>
-        </div>
-
-        <!-- Collection % over Time Table -->
-        <div class="chart-container rounded-2xl p-8 shadow-2xl">
-            <!-- Header Block -->
-            <div class="flex items-center gap-4 mb-8">
-                <div class="p-3 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 shadow-lg">
-                    <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-xl font-bold text-foreground">Collection % over Time</h3>
-                    <p class="text-sm text-muted-foreground font-medium">Detailed collection analysis by date</p>
-                </div>
-            </div>
-            
-            <!-- Table -->
-            <div class="w-full overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="border-b border-border">
-                            <th class="text-left py-3 px-4 font-medium text-muted-foreground">Date</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Repayment Amount</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Collected Amount</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Pending Amount</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Total Cases</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Collected Cases</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Pending Cases</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Collection %</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Pending %</th>
-                        </tr>
-                    </thead>
-                    <tbody id="collectionOverTimeTableBody">
-                        <tr>
-                            <td colspan="9" class="text-center py-8 text-gray-500">Loading data...</td>
-                        </tr>
-                    </tbody>
-                </table>
             </div>
         </div>
 
@@ -3422,59 +3421,12 @@ async function loadTimeSeriesChart(filterParams = null) {
         });
         
         console.log('Time series chart created successfully');
-        
-        // Populate Collection % over Time table
-        await populateCollectionOverTimeTable(data.data);
-        
     } catch (error) {
         console.error('Error loading time series chart:', error);
         // Show error message in the chart container
         const chartContainer = document.getElementById('timeSeriesChart').parentElement;
         chartContainer.innerHTML = '<div class="flex items-center justify-center h-80 text-red-500">Error loading chart: ' + error.message + '</div>';
     }
-}
-
-// Function to populate Collection % over Time table
-function populateCollectionOverTimeTable(timeSeriesData) {
-    const tbody = document.getElementById('collectionOverTimeTableBody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    
-    if (!timeSeriesData || timeSeriesData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">No data available</td></tr>';
-        return;
-    }
-    
-    timeSeriesData.forEach(item => {
-        const row = document.createElement('tr');
-        row.className = 'border-b border-border hover:bg-gray-800/50';
-        
-        const date = new Date(item.date);
-        const formattedDate = date.toLocaleDateString('en-IN', { 
-            day: '2-digit', 
-            month: 'short', 
-            year: 'numeric'
-        });
-        
-        const totalCases = item.collected_cases + item.pending_cases;
-        const collectionPercent = item.collection_percentage || 0;
-        const pendingPercent = ((item.pending_amount / item.repayment_amount) * 100) || 0;
-        
-        row.innerHTML = `
-            <td class="py-3 px-4 text-foreground">${formattedDate}</td>
-            <td class="py-3 px-4 text-right text-foreground font-medium">${formatCurrency(item.repayment_amount)}</td>
-            <td class="py-3 px-4 text-right text-green-400 font-medium">${formatCurrency(item.collected_amount)}</td>
-            <td class="py-3 px-4 text-right text-red-400 font-medium">${formatCurrency(item.pending_amount)}</td>
-            <td class="py-3 px-4 text-right text-foreground">${totalCases.toLocaleString()}</td>
-            <td class="py-3 px-4 text-right text-green-400">${item.collected_cases.toLocaleString()}</td>
-            <td class="py-3 px-4 text-right text-red-400">${item.pending_cases.toLocaleString()}</td>
-            <td class="py-3 px-4 text-right text-green-400 font-medium">${collectionPercent.toFixed(1)}%</td>
-            <td class="py-3 px-4 text-right text-red-400 font-medium">${pendingPercent.toFixed(1)}%</td>
-        `;
-        
-        tbody.appendChild(row);
-    });
 }
 
 // ===============================
