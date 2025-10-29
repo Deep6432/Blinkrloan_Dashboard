@@ -777,57 +777,30 @@ if (window.history.replaceState) {
         </div>
 
         <!-- Mobile Responsive City-wise Analysis Charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 mt-6 sm:mt-8">
-            <!-- Top 10 Cities by Collected Amount -->
-            <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl">
+        <!-- Top Cities - Collection Rate Chart -->
+        <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl mt-6 sm:mt-8">
                 <div class="flex items-center justify-between mb-8">
                     <div class="flex items-center gap-4">
-                        <div class="p-3 rounded-lg bg-emerald-500/10">
-                            <svg class="h-6 w-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="p-3 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 shadow-lg">
+                        <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                             </svg>
                         </div>
                         <div>
-                            <h2 class="text-xl font-semibold text-white">Top 10 Cities - Collection Rate</h2>
-                            <p class="text-gray-400 text-sm">Cities with highest collection percentage (%)</p>
+                        <h3 class="text-xl font-bold text-foreground">Top Cities – Collection Rate (%)</h3>
+                        <p class="text-sm text-muted-foreground font-medium">Color coded by performance bracket</p>
                         </div>
                     </div>
-                    <button onclick="openFullscreenChart('cityCollectedChart', 'Top 10 Cities - Collection Rate', 'Cities with highest collection percentage (%)')" class="p-2 rounded-lg bg-gray-600/20 hover:bg-gray-600/30 border border-gray-500/20 transition-colors" title="Open in Fullscreen">
+                <button onclick="openFullscreenChart('topCitiesCollectionChart', 'Top Cities – Collection Rate (%)', 'Color coded by performance bracket')" class="p-2 rounded-lg bg-gray-600/20 hover:bg-gray-600/30 border border-gray-500/20 transition-colors" title="Open in Fullscreen">
                         <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
                         </svg>
                     </button>
                 </div>
-                <div class="h-80">
-                    <canvas id="cityCollectedChart"></canvas>
+            <div class="h-96">
+                <canvas id="topCitiesCollectionChart"></canvas>
                 </div>
             </div>
-
-            <!-- Top 10 Cities with Uncollected Amount -->
-            <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl">
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center gap-4">
-                        <div class="p-3 rounded-lg bg-red-500/10">
-                            <svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-xl font-semibold text-white">Top 10 Cities - Lowest Collection Rate</h2>
-                            <p class="text-gray-400 text-sm">Cities with lowest collection percentage (%)</p>
-                        </div>
-                    </div>
-                    <button onclick="openFullscreenChart('cityUncollectedChart', 'Top 10 Cities - Lowest Collection Rate', 'Cities with lowest collection percentage (%)')" class="p-2 rounded-lg bg-gray-600/20 hover:bg-gray-600/30 border border-gray-500/20 transition-colors" title="Open in Fullscreen">
-                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="h-80">
-                    <canvas id="cityUncollectedChart"></canvas>
-                </div>
-            </div>
-        </div>
     </div>
     </div>
 
@@ -1259,6 +1232,64 @@ if (window.history.replaceState) {
                                     size: 14
                                 },
                                 callbacks: originalChart.options.plugins.tooltip.callbacks
+                            },
+                            datalabels: {
+                                display: function(context) {
+                                    // Show datalabels if the original chart had them enabled
+                                    const originalDatalabels = originalChart.options?.plugins?.datalabels;
+                                    if (originalDatalabels) {
+                                        if (typeof originalDatalabels.display === 'function') {
+                                            return originalDatalabels.display(context);
+                                        }
+                                        return originalDatalabels.display !== false;
+                                    }
+                                    return false;
+                                },
+                                color: '#ffffff',
+                                anchor: function(context) {
+                                    const originalDatalabels = originalChart.options?.plugins?.datalabels;
+                                    return originalDatalabels?.anchor || 'end';
+                                },
+                                align: function(context) {
+                                    const originalDatalabels = originalChart.options?.plugins?.datalabels;
+                                    return originalDatalabels?.align || 'right';
+                                },
+                                offset: function(context) {
+                                    const originalDatalabels = originalChart.options?.plugins?.datalabels;
+                                    return (originalDatalabels?.offset || 10) * 1.5;
+                                },
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                },
+                                formatter: function(value, context) {
+                                    // Always use 2 decimal places - get the actual data value
+                                    let dataValue = value;
+                                    
+                                    // If value is not a number, try to get it from the dataset
+                                    if (typeof value !== 'number' && context.datasetIndex !== undefined && context.dataIndex !== undefined) {
+                                        const dataset = originalData.datasets[context.datasetIndex];
+                                        if (dataset && dataset.data && dataset.data[context.dataIndex] !== undefined) {
+                                            dataValue = dataset.data[context.dataIndex];
+                                        }
+                                    }
+                                    
+                                    // Format to 2 decimal places
+                                    if (typeof dataValue === 'number') {
+                                        return dataValue.toFixed(2) + '%';
+                                    }
+                                    
+                                    // If it's a string, try to extract the number
+                                    if (typeof dataValue === 'string') {
+                                        const numMatch = dataValue.match(/(\d+\.?\d*)/);
+                                        if (numMatch) {
+                                            return parseFloat(numMatch[1]).toFixed(2) + '%';
+                                        }
+                                    }
+                                    
+                                    // Fallback
+                                    return typeof dataValue === 'number' ? dataValue.toFixed(2) + '%' : String(dataValue);
+                                }
                             }
                         },
                         scales: {
@@ -1306,8 +1337,7 @@ if (window.history.replaceState) {
         const chartInstances = {
             'timeSeriesChart': window.timeSeriesChartInstance,
             'stateChart': window.stateChartInstance,
-            'cityCollectedChart': window.cityCollectedChartInstance,
-            'cityUncollectedChart': window.cityUncollectedChartInstance,
+            'topCitiesCollectionChart': window.topCitiesCollectionChartInstance,
             'fraudStateChart': window.fraudStateChartInstance,
             'fraudTimeSeriesChart': window.fraudTimeSeriesChartInstance,
             'fraudCityCollectedChart': window.fraudCityCollectedChartInstance,
@@ -1415,8 +1445,8 @@ if (window.history.replaceState) {
         }
     }
 
-// Load city collected chart
-async function loadCityCollectedChart(filterParams = null) {
+// Load top cities collection rate chart (combined)
+async function loadTopCitiesCollectionChart(filterParams = null) {
     try {
         let params;
         if (filterParams) {
@@ -1424,189 +1454,158 @@ async function loadCityCollectedChart(filterParams = null) {
         } else {
             params = new URLSearchParams(window.location.search);
         }
-        const response = await fetch(`/api/city-collected/?${params}`);
-        const data = await response.json();
         
-        console.log('City collected data loaded:', data.data.length, 'cities');
+        // Fetch both collected and uncollected data
+        const [collectedResponse, uncollectedResponse] = await Promise.all([
+            fetch(`/api/city-collected/?${params}`),
+            fetch(`/api/city-uncollected/?${params}`)
+        ]);
         
-        const ctx = document.getElementById('cityCollectedChart').getContext('2d');
+        const collectedData = await collectedResponse.json();
+        const uncollectedData = await uncollectedResponse.json();
         
-        // Destroy existing chart if it exists
-        if (window.cityCollectedChartInstance) {
-            window.cityCollectedChartInstance.destroy();
-        }
+        console.log('City collected data loaded:', collectedData.data.length, 'cities');
+        console.log('City uncollected data loaded:', uncollectedData.data.length, 'cities');
         
-        // Create horizontal bar chart
-        window.cityCollectedChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: data.data.map(item => item.city),
-                datasets: [{
-                    label: 'Collection Rate (%)',
-                    data: data.data.map(item => item.collection_percentage),
-                    backgroundColor: '#10b981',
-                    borderColor: '#059669',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y',
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: '#94a3b8'
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleColor: '#f8fafc',
-                        bodyColor: '#f8fafc',
-                        borderColor: '#334155',
-                        borderWidth: 1,
-                        callbacks: {
-                            label: function(context) {
-                                const city = data.data[context.dataIndex];
-                                return [
-                                    'City: ' + city.city,
-                                    'Collection Rate: ' + city.collection_percentage.toFixed(1) + '%',
-                                    'Collected Amount: ' + formatCurrency(city.collected_amount),
-                                    'Repayment Amount: ' + formatCurrency(city.repayment_amount),
-                                    'Applications: ' + city.total_applications
-                                ];
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            color: '#334155'
-                        },
-                        ticks: {
-                            color: '#94a3b8',
-                            callback: function(value) {
-                                return value.toFixed(1) + '%';
-                            }
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: '#334155'
-                        },
-                        ticks: {
-                            color: '#94a3b8'
-                        }
-                    }
-                }
+        // Combine all cities with their collection rates, avoiding duplicates
+        const cityMap = new Map();
+        
+        // Add collected cities
+        collectedData.data.forEach(item => {
+            cityMap.set(item.city, {
+                city: item.city,
+                collection_rate: item.collection_percentage
+            });
+        });
+        
+        // Add uncollected cities (only if not already present or if the rate is higher)
+        uncollectedData.data.forEach(item => {
+            const existingCity = cityMap.get(item.city);
+            if (!existingCity || item.collection_percentage > existingCity.collection_rate) {
+                cityMap.set(item.city, {
+                    city: item.city,
+                    collection_rate: item.collection_percentage
+                });
             }
         });
         
-        console.log('City collected chart created successfully');
-    } catch (error) {
-        console.error('Error loading city collected chart:', error);
-    }
-}
-
-// Load city uncollected chart
-async function loadCityUncollectedChart(filterParams = null) {
-    try {
-        let params;
-        if (filterParams) {
-            params = new URLSearchParams(filterParams);
-        } else {
-            params = new URLSearchParams(window.location.search);
+        // Convert map to array and sort by collection rate descending
+        const allCities = Array.from(cityMap.values());
+        allCities.sort((a, b) => b.collection_rate - a.collection_rate);
+        
+        // Take top 20 cities
+        const topCities = allCities.slice(0, 20);
+        
+        // Color coding function based on thresholds
+        function getColorForRate(rate) {
+            if (rate >= 90) return '#1DB954';           // Green
+            if (rate >= 87) return '#FFDD00';           // Orange
+            if (rate >= 85) return '#FFA500';           // Dark Orange
+            if (rate >= 82) return '#FF8C00';           // Red
+            if (rate >= 80) return '#FF4C4C';           // Dark Red
+            return '#C62828';                           // Maroon Red (<80%)
         }
-        const response = await fetch(`/api/city-uncollected/?${params}`);
-        const data = await response.json();
         
-        console.log('City uncollected data loaded:', data.data.length, 'cities');
-        
-        const ctx = document.getElementById('cityUncollectedChart').getContext('2d');
+        const ctx = document.getElementById('topCitiesCollectionChart').getContext('2d');
         
         // Destroy existing chart if it exists
-        if (window.cityUncollectedChartInstance) {
-            window.cityUncollectedChartInstance.destroy();
+        if (window.topCitiesCollectionChartInstance) {
+            window.topCitiesCollectionChartInstance.destroy();
         }
         
         // Create horizontal bar chart
-        window.cityUncollectedChartInstance = new Chart(ctx, {
+        window.topCitiesCollectionChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: data.data.map(item => item.city),
+                labels: topCities.map(item => item.city),
                 datasets: [{
                     label: 'Collection Rate (%)',
-                    data: data.data.map(item => Math.max(item.collection_percentage, 0.1)), // Minimum 0.1% for visibility
-                    backgroundColor: '#ef4444',
-                    borderColor: '#dc2626',
-                    borderWidth: 1
+                    data: topCities.map(item => item.collection_rate),
+                    backgroundColor: topCities.map(item => getColorForRate(item.collection_rate)),
+                    borderColor: topCities.map(item => getColorForRate(item.collection_rate)),
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
                 }]
             },
             options: {
+                indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                indexAxis: 'y',
                 plugins: {
                     legend: {
-                        labels: {
-                            color: '#94a3b8'
-                        }
+                        display: false
                     },
                     tooltip: {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleColor: '#f8fafc',
-                        bodyColor: '#f8fafc',
-                        borderColor: '#334155',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        borderColor: '#374151',
                         borderWidth: 1,
                         callbacks: {
                             label: function(context) {
-                                const city = data.data[context.dataIndex];
-                                return [
-                                    'City: ' + city.city,
-                                    'Collection Rate: ' + city.collection_percentage.toFixed(1) + '%',
-                                    'Uncollected Amount: ' + formatCurrency(city.uncollected_amount),
-                                    'Collected Amount: ' + formatCurrency(city.collected_amount),
-                                    'Repayment Amount: ' + formatCurrency(city.repayment_amount),
-                                    'Applications: ' + city.total_applications,
-                                    'Note: Bar shows minimum height for 0% values'
-                                ];
+                                const city = topCities[context.dataIndex];
+                                return `${city.city}: ${city.collection_rate.toFixed(1)}%`;
                             }
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        color: '#ffffff',
+                        anchor: 'end',
+                        align: 'right',
+                        offset: 10,
+                        font: {
+                            size: 11,
+                            weight: 'bold'
+                        },
+                        formatter: function(value, context) {
+                            return value.toFixed(2) + '%';
                         }
                     }
                 },
                 scales: {
                     x: {
                         beginAtZero: true,
-                        max: 2, // Set a small max to make 0% values visible
+                        max: 100,
                         grid: {
-                            color: '#334155'
+                            color: '#374151',
+                            drawBorder: false
                         },
                         ticks: {
-                            color: '#94a3b8',
+                            color: '#9ca3af',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                weight: '600'
+                            },
                             callback: function(value) {
-                                if (value === 0.1) return '0.0%'; // Show 0.0% for minimum bars
-                                return value.toFixed(1) + '%';
+                                return value + '%';
                             }
                         }
                     },
                     y: {
                         grid: {
-                            color: '#334155'
+                            display: false
                         },
                         ticks: {
-                            color: '#94a3b8'
+                            color: '#ffffff',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 12,
+                                weight: '600'
+                            }
                         }
                     }
                 }
-            }
+            },
+            plugins: [ChartDataLabels]
         });
         
-        console.log('City uncollected chart created successfully');
     } catch (error) {
-        console.error('Error loading city uncollected chart:', error);
+        console.error('Error loading top cities collection chart:', error);
     }
 }
+
 
 // DPD Details Modal Functions
 let currentDPDBucket = null;
@@ -2231,8 +2230,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDPDBucketData();
     loadStateRepaymentChart();
     loadTimeSeriesChart();
-    loadCityCollectedChart();
-    loadCityUncollectedChart();
+    loadTopCitiesCollectionChart();
 });
 
 // Debug function to test URL parameter preservation
@@ -2784,8 +2782,7 @@ function setupAutoRefresh() {
                 loadDPDBucketData(filterParams),
                 loadStateRepaymentChart(filterParams),
                 loadTimeSeriesChart(filterParams),
-                loadCityCollectedChart(filterParams),
-                loadCityUncollectedChart(filterParams)
+                loadTopCitiesCollectionChart(filterParams)
             ]);
             
                 console.log('Collection with Fraud tab data refreshed successfully');
