@@ -675,24 +675,38 @@ def api_state_repayment(request):
         if not filtered_records:
             return JsonResponse({'data': []})
         
-        # Group by state and calculate repayment amount
+        # Group by state and calculate aggregates
         state_data = {}
         for record in filtered_records:
             state = record.get('state', 'Unknown')
             if state not in state_data:
-                state_data[state] = Decimal('0')
-            
-            state_data[state] += Decimal(str(record.get('total_received', 0)))
-        
+                state_data[state] = {
+                    'repayment_amount': Decimal('0'),
+                    'collected_amount': Decimal('0')
+                }
+
+            repayment_amt = Decimal(str(record.get('repayment_amount', 0)))
+            collected_amt = Decimal(str(record.get('total_received', 0)))
+
+            state_data[state]['repayment_amount'] += repayment_amt
+            state_data[state]['collected_amount'] += collected_amt
+
         # Convert to list and format
-        result = [
-            {
+        result = []
+        for state, values in state_data.items():
+            repayment_total = values['repayment_amount']
+            collected_total = values['collected_amount']
+            pending_total = repayment_total - collected_total
+            if pending_total < 0:
+                pending_total = Decimal('0')
+
+            result.append({
                 'state': state,
-                'repayment_amount': float(amount)
-            }
-            for state, amount in state_data.items()
-        ]
-        
+                'repayment_amount': float(repayment_total),
+                'collected_amount': float(collected_total),
+                'pending_amount': float(pending_total)
+            })
+
         # Sort by repayment amount (highest first)
         result.sort(key=lambda x: x['repayment_amount'], reverse=True)
         
