@@ -707,8 +707,8 @@ def api_state_repayment(request):
                 'pending_amount': float(pending_total)
             })
 
-        # Sort by repayment amount (highest first)
-        result.sort(key=lambda x: x['repayment_amount'], reverse=True)
+        # Sort by pending amount (highest first) for Pending Amount by State chart
+        result.sort(key=lambda x: x['pending_amount'], reverse=True)
         
         return JsonResponse({'data': result})
         
