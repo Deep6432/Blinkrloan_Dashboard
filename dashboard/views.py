@@ -2127,6 +2127,9 @@ def api_fraud_pending_cases_by_amount(request):
                 'total_collected_amount': Decimal('0')
             }
         
+        # Calculate overall total pending amount across all buckets
+        overall_total_pending_amount = Decimal('0')
+        
         # Process records
         for record in filtered_records:
             # Only count cases with closed_status = 'Not Closed'
@@ -2141,6 +2144,13 @@ def api_fraud_pending_cases_by_amount(request):
             # This matches the KPI card calculation: pending_collection = repayment_amount - collected_amount
             pending_amount = repayment_amount - total_received
             
+            # Ensure pending amount is not negative (if overpaid, pending is 0)
+            if pending_amount < 0:
+                pending_amount = Decimal('0')
+            
+            # Add to overall total pending amount
+            overall_total_pending_amount += pending_amount
+            
             # Count all "Not Closed" cases, regardless of pending amount or repayment amount
             # Use repayment_amount to determine bucket (in thousands)
             # For cases with repayment_amount <= 0, use 0 for bucketing
@@ -2153,10 +2163,8 @@ def api_fraud_pending_cases_by_amount(request):
                 # Add repayment amount and collected amount for all cases
                 bucket_data[bucket]['total_repayment_amount'] += repayment_amount
                 bucket_data[bucket]['total_collected_amount'] += total_received
-                # Add pending amount for all cases (can be negative if overpaid, but we'll set to 0)
+                # Add pending amount for all cases
                 # This ensures: total_pending_amount + total_collected_amount = total_repayment_amount
-                if pending_amount < 0:
-                    pending_amount = Decimal('0')
                 bucket_data[bucket]['total_pending_amount'] += pending_amount
         
         # Convert to list and format
@@ -2171,7 +2179,10 @@ def api_fraud_pending_cases_by_amount(request):
                     'total_collected_amount': float(bucket_data[bucket]['total_collected_amount'])
                 })
         
-        return JsonResponse({'buckets': result})
+        return JsonResponse({
+            'buckets': result,
+            'overall_total_pending_amount': float(overall_total_pending_amount)
+        })
         
     except Exception as e:
         logger.error(f"Error fetching pending cases by amount: {e}")

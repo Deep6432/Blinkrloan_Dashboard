@@ -1729,6 +1729,7 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
         }
         
         const buckets = data.buckets || [];
+        const overallTotalPendingAmount = data.overall_total_pending_amount || 0;
         console.log('Pending cases by amount data loaded:', buckets.length, 'buckets');
         
         const canvasElement = document.getElementById('pendingCasesByAmountChart');
@@ -1857,6 +1858,13 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
                                 // Total Pending Amount
                                 labels.push('Total Pending Amount (₹): ₹' + 
                                     bucketData.total_pending_amount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                
+                                // Percentage of Total Pending Amount
+                                if (overallTotalPendingAmount > 0) {
+                                    const percentage = (bucketData.total_pending_amount / overallTotalPendingAmount) * 100;
+                                    labels.push('Percentage of Total Pending: ' + 
+                                        percentage.toFixed(2) + '%');
+                                }
                                 
                                 // Number of Cases
                                 labels.push('Number of Cases: ' + 
