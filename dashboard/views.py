@@ -2065,6 +2065,119 @@ def api_fraud_city_uncollected(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
+def api_fraud_pending_cases_by_amount(request):
+    """API endpoint for pending cases grouped by amount bucket in Collection Without Fraud tab"""
+    try:
+        # Fetch data from the without-fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('cwpr', [])
+        
+        # Apply filters if provided
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'buckets': []})
+        
+        # Define amount buckets (in thousands)
+        def get_amount_bucket(amount):
+            """Categorize amount into bucket"""
+            amount_float = float(amount)
+            if amount_float < 5:
+                return '<5k'  # Include amounts below 5k
+            elif 5 <= amount_float < 10:
+                return '5-10k'
+            elif 10 <= amount_float < 20:
+                return '10-20k'
+            elif 20 <= amount_float < 30:
+                return '20-30k'  # Include 20-30k range
+            elif 30 <= amount_float < 40:  # 30-30k likely meant 30-40k
+                return '30-40k'
+            elif 40 <= amount_float < 50:
+                return '40-50k'
+            elif 50 <= amount_float < 60:
+                return '50-60k'
+            elif 60 <= amount_float < 70:
+                return '60-70k'
+            elif 70 <= amount_float < 80:
+                return '70-80k'
+            elif 80 <= amount_float < 90:
+                return '80-90k'
+            elif amount_float >= 90:
+                return '90+k'
+            else:
+                return None
+        
+        # Group pending cases by amount bucket
+        # A case is pending if repayment_amount > total_received
+        bucket_data = {}
+        bucket_order = ['<5k', '5-10k', '10-20k', '20-30k', '30-40k', '40-50k', '50-60k', '60-70k', '70-80k', '80-90k', '90+k']
+        
+        # Initialize all buckets
+        for bucket in bucket_order:
+            bucket_data[bucket] = {
+                'bucket': bucket,
+                'count': 0,
+                'total_pending_amount': Decimal('0'),
+                'total_repayment_amount': Decimal('0'),
+                'total_collected_amount': Decimal('0')
+            }
+        
+        # Process records
+        for record in filtered_records:
+            # Only count cases with closed_status = 'Not Closed'
+            closed_status = record.get('closed_status', '')
+            if closed_status != 'Not Closed':
+                continue
+            
+            repayment_amount = safe_decimal_conversion(record.get('repayment_amount', 0))
+            total_received = safe_decimal_conversion(record.get('total_received', 0))
+            
+            # Calculate pending amount as repayment_amount - total_received
+            # This matches the KPI card calculation: pending_collection = repayment_amount - collected_amount
+            pending_amount = repayment_amount - total_received
+            
+            # Count all "Not Closed" cases, regardless of pending amount or repayment amount
+            # Use repayment_amount to determine bucket (in thousands)
+            # For cases with repayment_amount <= 0, use 0 for bucketing
+            repayment_for_bucket = max(repayment_amount, Decimal('0'))
+            repayment_in_k = float(repayment_for_bucket) / 1000
+            bucket = get_amount_bucket(repayment_in_k)
+            
+            if bucket and bucket in bucket_data:
+                bucket_data[bucket]['count'] += 1
+                # Add repayment amount and collected amount for all cases
+                bucket_data[bucket]['total_repayment_amount'] += repayment_amount
+                bucket_data[bucket]['total_collected_amount'] += total_received
+                # Add pending amount for all cases (can be negative if overpaid, but we'll set to 0)
+                # This ensures: total_pending_amount + total_collected_amount = total_repayment_amount
+                if pending_amount < 0:
+                    pending_amount = Decimal('0')
+                bucket_data[bucket]['total_pending_amount'] += pending_amount
+        
+        # Convert to list and format
+        result = []
+        for bucket in bucket_order:
+            if bucket in bucket_data:
+                result.append({
+                    'bucket': bucket_data[bucket]['bucket'],
+                    'count': bucket_data[bucket]['count'],
+                    'total_pending_amount': float(bucket_data[bucket]['total_pending_amount']),
+                    'total_repayment_amount': float(bucket_data[bucket]['total_repayment_amount']),
+                    'total_collected_amount': float(bucket_data[bucket]['total_collected_amount'])
+                })
+        
+        return JsonResponse({'buckets': result})
+        
+    except Exception as e:
+        logger.error(f"Error fetching pending cases by amount: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 
 
 

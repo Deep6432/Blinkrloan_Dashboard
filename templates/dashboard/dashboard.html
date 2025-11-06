@@ -826,8 +826,31 @@ if (window.history.replaceState) {
                 <canvas id="topCitiesCollectionChart"></canvas>
                 </div>
             </div>
-    </div>
-    </div>
+
+        <!-- Pending Cases by Amount Bucket Chart -->
+        <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl mt-6 sm:mt-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-4">
+                    <div class="p-3 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/30 shadow-lg">
+                        <svg class="h-6 w-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                            </svg>
+                        </div>
+                        <div>
+                        <h3 class="text-xl font-bold text-foreground">Pending Cases by Amount Bucket</h3>
+                        <p class="text-sm text-muted-foreground font-medium">Pending cases grouped by repayment amount</p>
+                        </div>
+                    </div>
+                <button onclick="openFullscreenChart('pendingCasesByAmountChart', 'Pending Cases by Amount Bucket', 'Pending cases grouped by repayment amount')" class="p-2 rounded-lg bg-gray-600/20 hover:bg-gray-600/30 border border-gray-500/20 transition-colors" title="Open in Fullscreen">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                        </svg>
+                    </button>
+                </div>
+            <div class="h-96">
+                <canvas id="pendingCasesByAmountChart"></canvas>
+                </div>
+            </div>
 
     <!-- DPD Details Modal -->
     <div id="dpdDetailsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
@@ -1286,7 +1309,13 @@ if (window.history.replaceState) {
                                     weight: 'bold'
                                 },
                                 formatter: function(value, context) {
-                                    // Always use 2 decimal places - get the actual data value
+                                    // Use the original chart's formatter if available
+                                    const originalDatalabels = originalChart.options?.plugins?.datalabels;
+                                    if (originalDatalabels && originalDatalabels.formatter) {
+                                        return originalDatalabels.formatter(value, context);
+                                    }
+                                    
+                                    // Fallback: get the actual data value
                                     let dataValue = value;
                                     
                                     // If value is not a number, try to get it from the dataset
@@ -1297,25 +1326,76 @@ if (window.history.replaceState) {
                                         }
                                     }
                                     
-                                    // Format to 2 decimal places
-                                    if (typeof dataValue === 'number') {
-                                        return dataValue.toFixed(2) + '%';
+                                    // Format based on dataset label - don't add % for case counts
+                                    const datasetLabel = originalData.datasets[context.datasetIndex]?.label || '';
+                                    if (datasetLabel.toLowerCase().includes('case')) {
+                                        // For case counts, show whole numbers
+                                        return typeof dataValue === 'number' ? Math.round(dataValue).toLocaleString('en-IN') : dataValue;
+                                    } else if (datasetLabel.toLowerCase().includes('amount') || datasetLabel.toLowerCase().includes('₹')) {
+                                        // For amounts, show currency format
+                                        return typeof dataValue === 'number' ? '₹' + dataValue.toLocaleString('en-IN', {maximumFractionDigits: 0}) : dataValue;
+                                    } else {
+                                        // Default: show as number with 2 decimal places (for percentages)
+                                        return typeof dataValue === 'number' ? dataValue.toFixed(2) + '%' : String(dataValue);
                                     }
-                                    
-                                    // If it's a string, try to extract the number
-                                    if (typeof dataValue === 'string') {
-                                        const numMatch = dataValue.match(/(\d+\.?\d*)/);
-                                        if (numMatch) {
-                                            return parseFloat(numMatch[1]).toFixed(2) + '%';
-                                        }
-                                    }
-                                    
-                                    // Fallback
-                                    return typeof dataValue === 'number' ? dataValue.toFixed(2) + '%' : String(dataValue);
                                 }
                             }
                         },
-                        scales: {
+                        scales: originalChart.options.scales ? {
+                            ...originalChart.options.scales,
+                            x: {
+                                ...originalChart.options.scales.x,
+                                grid: {
+                                    color: '#334155'
+                                },
+                                ticks: {
+                                    ...originalChart.options.scales.x?.ticks,
+                                    color: '#94a3b8',
+                                    font: {
+                                        size: 14
+                                    }
+                                }
+                            },
+                            y: originalChart.options.scales.y ? {
+                                ...originalChart.options.scales.y,
+                                grid: {
+                                    color: '#334155'
+                                },
+                                ticks: {
+                                    ...originalChart.options.scales.y.ticks,
+                                    color: '#94a3b8',
+                                    font: {
+                                        size: 14
+                                    }
+                                }
+                            } : {
+                                grid: {
+                                    color: '#334155'
+                                },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: {
+                                        size: 14
+                                    },
+                                    callback: function(value) {
+                                        return Math.round(value).toLocaleString('en-IN');
+                                    }
+                                }
+                            },
+                            y1: originalChart.options.scales.y1 ? {
+                                ...originalChart.options.scales.y1,
+                                grid: {
+                                    drawOnChartArea: false
+                                },
+                                ticks: {
+                                    ...originalChart.options.scales.y1.ticks,
+                                    color: '#60a5fa',
+                                    font: {
+                                        size: 14
+                                    }
+                                }
+                            } : undefined
+                        } : {
                             x: {
                                 grid: {
                                     color: '#334155'
@@ -1337,7 +1417,7 @@ if (window.history.replaceState) {
                                         size: 14
                                     },
                                     callback: function(value) {
-                                        return formatCurrency(value);
+                                        return Math.round(value).toLocaleString('en-IN');
                                     }
                                 }
                             }
@@ -1361,6 +1441,7 @@ if (window.history.replaceState) {
             'timeSeriesChart': window.timeSeriesChartInstance,
             'stateChart': window.stateChartInstance,
             'topCitiesCollectionChart': window.topCitiesCollectionChartInstance,
+            'pendingCasesByAmountChart': window.pendingCasesByAmountChartInstance,
             'fraudStateChart': window.fraudStateChartInstance,
             'fraudTimeSeriesChart': window.fraudTimeSeriesChartInstance,
             'fraudCityCollectedChart': window.fraudCityCollectedChartInstance,
@@ -1626,6 +1707,280 @@ async function loadTopCitiesCollectionChart(filterParams = null) {
         
     } catch (error) {
         console.error('Error loading top cities collection chart:', error);
+    }
+}
+
+// Load pending cases by amount bucket chart
+async function loadPendingCasesByAmountChart(filterParams = null) {
+    try {
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
+        
+        const response = await fetch(`/api/fraud/pending-cases-by-amount/?${params}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('Error fetching pending cases by amount:', data.error);
+            return;
+        }
+        
+        const buckets = data.buckets || [];
+        console.log('Pending cases by amount data loaded:', buckets.length, 'buckets');
+        
+        const canvasElement = document.getElementById('pendingCasesByAmountChart');
+        if (!canvasElement) {
+            console.warn('Pending cases by amount chart canvas not found');
+            return;
+        }
+        
+        const ctx = canvasElement.getContext('2d');
+        
+        // Destroy existing chart if it exists
+        if (window.pendingCasesByAmountChartInstance) {
+            window.pendingCasesByAmountChartInstance.destroy();
+        }
+        
+        // Prepare data for chart
+        const labels = buckets.map(item => item.bucket);
+        const counts = buckets.map(item => item.count);
+        const amounts = buckets.map(item => item.total_pending_amount);
+        
+        // Store full bucket data for tooltip
+        const bucketDataMap = {};
+        buckets.forEach(item => {
+            bucketDataMap[item.bucket] = item;
+        });
+        
+        // Create bar chart
+        window.pendingCasesByAmountChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Number of Cases',
+                        data: counts,
+                        backgroundColor: 'rgba(251, 146, 60, 0.8)',
+                        borderColor: 'rgba(251, 146, 60, 1)',
+                        borderWidth: 2,
+                        yAxisID: 'y',
+                        order: 2,
+                        maxBarThickness: 50,
+                        categoryPercentage: 0.6,
+                        barPercentage: 0.8
+                    },
+                    {
+                        label: 'Total Pending Amount (₹)',
+                        data: amounts,
+                        type: 'line',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        fill: false,
+                        tension: 0.4,
+                        yAxisID: 'y1',
+                        order: 1,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 20,
+                        bottom: 10,
+                        left: 10,
+                        right: 10
+                    }
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#ffffff',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 12,
+                                weight: '600'
+                            },
+                            padding: 15,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        borderColor: '#374151',
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            title: function(context) {
+                                return context[0].label;
+                            },
+                            label: function(context) {
+                                // Return empty for individual dataset labels to avoid duplication
+                                return '';
+                            },
+                            afterBody: function(context) {
+                                // Show all metrics only once in afterBody
+                                const bucket = context[0].label;
+                                const bucketData = bucketDataMap[bucket];
+                                
+                                if (!bucketData) {
+                                    return [];
+                                }
+                                
+                                // Return all metrics for the bucket
+                                const labels = [];
+                                
+                                // Total Repayment Amount
+                                labels.push('Total Repayment Amount (₹): ₹' + 
+                                    bucketData.total_repayment_amount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                
+                                // Collected Amount
+                                labels.push('Collected Amount (₹): ₹' + 
+                                    bucketData.total_collected_amount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                
+                                // Total Pending Amount
+                                labels.push('Total Pending Amount (₹): ₹' + 
+                                    bucketData.total_pending_amount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                
+                                // Number of Cases
+                                labels.push('Number of Cases: ' + 
+                                    bucketData.count.toLocaleString('en-IN') + ' cases');
+                                
+                                return labels;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: true,
+                        color: '#ffffff',
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 5,
+                        font: {
+                            size: 10,
+                            weight: 'bold'
+                        },
+                        formatter: function(value, context) {
+                            if (context.datasetIndex === 0) {
+                                // Show case count as whole number, not percentage
+                                return value > 0 ? Math.round(value).toLocaleString('en-IN') : '';
+                            }
+                            return '';
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: '#374151',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 11,
+                                weight: '600'
+                            },
+                            maxRotation: 45,
+                            minRotation: 0
+                        },
+                        offset: true
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: {
+                            color: '#374151',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 11,
+                                weight: '600'
+                            },
+                            callback: function(value) {
+                                // Ensure we show numbers, not percentages
+                                return Math.round(value).toLocaleString('en-IN');
+                            },
+                            stepSize: 1,  // Ensure whole numbers for case counts
+                            maxTicksLimit: 10
+                        },
+                        afterFit: function(scale) {
+                            scale.paddingTop = 10;
+                            scale.paddingBottom = 10;
+                        },
+                        title: {
+                            display: true,
+                            text: 'Number of Cases',
+                            color: '#ffffff',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 12,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: '#60a5fa',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 11,
+                                weight: '600'
+                            },
+                            callback: function(value) {
+                                return '₹' + (value / 1000).toFixed(0) + 'k';
+                            },
+                            maxTicksLimit: 10
+                        },
+                        afterFit: function(scale) {
+                            scale.paddingTop = 10;
+                            scale.paddingBottom = 10;
+                        },
+                        title: {
+                            display: true,
+                            text: 'Pending Amount (₹)',
+                            color: '#60a5fa',
+                            font: {
+                                family: 'Inter, sans-serif',
+                                size: 12,
+                                weight: '600'
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [ChartDataLabels]
+        });
+        
+    } catch (error) {
+        console.error('Error loading pending cases by amount chart:', error);
     }
 }
 
@@ -2247,11 +2602,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Restore previously active tab from localStorage
     restoreActiveTab();
     
+    // Get the active tab after restoration
+    const activeTab = localStorage.getItem('activeTab') || 'collection';
+    
     loadDPDBucketData();
     loadStateRepaymentChart();
     loadStatePendingChart();
     loadTimeSeriesChart();
     loadTopCitiesCollectionChart();
+    
+    // Only load pending cases chart if collection tab is active
+    if (activeTab === 'collection') {
+        loadPendingCasesByAmountChart();
+    }
 });
 
 // Debug function to test URL parameter preservation
@@ -2801,13 +3164,14 @@ function setupAutoRefresh() {
                 loadStateRepaymentChart(filterParams),
                 loadStatePendingChart(filterParams),
                 loadTimeSeriesChart(filterParams),
-                loadTopCitiesCollectionChart(filterParams)
+                loadTopCitiesCollectionChart(filterParams),
+                loadPendingCasesByAmountChart(filterParams)
             ]);
             
-                console.log('Collection with Fraud tab data refreshed successfully');
+                console.log('Collection without Fraud tab data refreshed successfully');
                 
             } else if (activeTab === 'fraud') {
-                // Refresh Collection WITHOUT Fraud tab
+                // Refresh Collection WITH Fraud tab
                 const form = document.getElementById('fraudFilterForm');
                 const filters = {};
                 
@@ -2838,7 +3202,7 @@ function setupAutoRefresh() {
                     loadFraudCityUncollectedChart(filters)
                 ]);
                 
-                console.log('Collection without Fraud tab data refreshed successfully');
+                console.log('Collection with Fraud tab data refreshed successfully');
                 
             } else if (activeTab === 'dailyPerformance') {
                 // Daily Performance tab - static UI only (no refresh needed)
@@ -3942,6 +4306,14 @@ function switchTab(tabName) {
     localStorage.setItem('activeTab', tabName);
     console.log('Active tab saved to localStorage:', tabName);
     
+    // Initialize collection tab charts if it's being switched to
+    if (tabName === 'collection') {
+        console.log('Switching to collection tab, loading charts...');
+        const params = new URLSearchParams(window.location.search);
+        const filterParams = Object.fromEntries(params.entries());
+        loadPendingCasesByAmountChart(filterParams);
+    }
+    
     // Initialize fraud tab if it's being switched to
     if (tabName === 'fraud') {
         console.log('Switching to fraud tab, initializing...');
@@ -4774,7 +5146,9 @@ document.addEventListener('DOMContentLoaded', function() {
             border: 1px solid rgba(59, 130, 246, 0.3);
         }
         .tab-content {
-            display: block
+            display: block;
+            margin-top: 0 !important;
+            padding-top: 0 !important;
         }
         .tab-content.hidden {
             display: none;
@@ -4787,8 +5161,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </div> <!-- End Collection Without Fraud Tab -->
 
         <!-- Collection With Fraud Tab -->
-        <div id="fraudContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
-        <!-- Collapsible Filters -->
+        <div id="fraudContent" class="tab-content hidden"><!-- Collapsible Filters -->
         <div class="card mb-8">
             <div class="p-6 cursor-pointer" onclick="toggleFraudFilters()">
                 <div class="flex items-center justify-between">
@@ -5259,10 +5632,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         </div> <!-- End Collection With Fraud Tab -->
         <!-- Loan Count Wise Tab -->
-        <div id="loanCountContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
-            
-            <!-- Coming Soon Banner -->
-            <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
+        <div id="loanCountContent" class="tab-content hidden"><!-- Coming Soon Banner -->
+        <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
                 <div class="flex items-center justify-center gap-3 mb-2">
                     <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -5418,10 +5789,8 @@ document.addEventListener('DOMContentLoaded', function() {
         </div> <!-- End Loan Count Wise Tab -->
 
         <!-- Daily Performance Metrics Tab -->
-        <div id="dailyPerformanceContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
-            
-            <!-- Coming Soon Banner -->
-            <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
+        <div id="dailyPerformanceContent" class="tab-content hidden"><!-- Coming Soon Banner -->
+        <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
                 <div class="flex items-center justify-center gap-3 mb-2">
                     <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
