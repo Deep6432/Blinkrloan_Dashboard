@@ -1730,6 +1730,9 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
         
         const buckets = data.buckets || [];
         const overallTotalPendingAmount = data.overall_total_pending_amount || 0;
+        const overallTotalRepaymentAmount = data.overall_total_repayment_amount || 0;
+        const overallTotalCollectedAmount = data.overall_total_collected_amount || 0;
+        const overallTotalCases = data.overall_total_cases || 0;
         console.log('Pending cases by amount data loaded:', buckets.length, 'buckets');
         
         const canvasElement = document.getElementById('pendingCasesByAmountChart');
@@ -1866,9 +1869,26 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
                                         percentage.toFixed(2) + '%');
                                 }
                                 
-                                // Number of Cases
-                                labels.push('Number of Cases: ' + 
+                                // Number of cases in this bucket for the month
+                                labels.push('Bucket Cases (Month): ' + 
                                     bucketData.count.toLocaleString('en-IN') + ' cases');
+                                
+                                // Total cases in the month and share of cases
+                                if (overallTotalCases > 0) {
+                                    const casePercentage = (bucketData.count / overallTotalCases) * 100;
+                                    labels.push('Share of Monthly Cases: ' + 
+                                        casePercentage.toFixed(2) + '% of ' + overallTotalCases.toLocaleString('en-IN') + ' cases');
+                                }
+                                
+                                // Overall repayment/collection context (optional informative)
+                                if (overallTotalRepaymentAmount > 0) {
+                                    labels.push('Total Monthly Repayment (₹): ₹' + 
+                                        overallTotalRepaymentAmount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                }
+                                if (overallTotalCollectedAmount > 0) {
+                                    labels.push('Total Monthly Collection (₹): ₹' + 
+                                        overallTotalCollectedAmount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+                                }
                                 
                                 return labels;
                             }

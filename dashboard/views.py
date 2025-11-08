@@ -2127,8 +2127,11 @@ def api_fraud_pending_cases_by_amount(request):
                 'total_collected_amount': Decimal('0')
             }
         
-        # Calculate overall total pending amount across all buckets
+        # Calculate overall aggregates across all buckets
         overall_total_pending_amount = Decimal('0')
+        overall_total_repayment_amount = Decimal('0')
+        overall_total_collected_amount = Decimal('0')
+        overall_total_cases = 0
         
         # Process records
         for record in filtered_records:
@@ -2148,8 +2151,11 @@ def api_fraud_pending_cases_by_amount(request):
             if pending_amount < 0:
                 pending_amount = Decimal('0')
             
-            # Add to overall total pending amount
+            # Add to overall totals
             overall_total_pending_amount += pending_amount
+            overall_total_repayment_amount += repayment_amount
+            overall_total_collected_amount += total_received
+            overall_total_cases += 1
             
             # Count all "Not Closed" cases, regardless of pending amount or repayment amount
             # Use repayment_amount to determine bucket (in thousands)
@@ -2181,7 +2187,10 @@ def api_fraud_pending_cases_by_amount(request):
         
         return JsonResponse({
             'buckets': result,
-            'overall_total_pending_amount': float(overall_total_pending_amount)
+            'overall_total_pending_amount': float(overall_total_pending_amount),
+            'overall_total_repayment_amount': float(overall_total_repayment_amount),
+            'overall_total_collected_amount': float(overall_total_collected_amount),
+            'overall_total_cases': overall_total_cases
         })
         
     except Exception as e:
