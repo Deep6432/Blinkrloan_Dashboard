@@ -1730,9 +1730,6 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
         
         const buckets = data.buckets || [];
         const overallTotalPendingAmount = data.overall_total_pending_amount || 0;
-        const overallTotalRepaymentAmount = data.overall_total_repayment_amount || 0;
-        const overallTotalCollectedAmount = data.overall_total_collected_amount || 0;
-        const overallTotalCases = data.overall_total_cases || 0;
         console.log('Pending cases by amount data loaded:', buckets.length, 'buckets');
         
         const canvasElement = document.getElementById('pendingCasesByAmountChart');
@@ -1869,26 +1866,18 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
                                         percentage.toFixed(2) + '%');
                                 }
                                 
-                                // Number of cases in this bucket for the month
-                                labels.push('Bucket Cases (Month): ' + 
-                                    bucketData.count.toLocaleString('en-IN') + ' cases');
+                                const totalCases = bucketData.total_count ?? 0;
+                                const pendingCases = bucketData.pending_count ?? bucketData.count ?? 0;
+                                const pendingPctCount = Number(bucketData.pending_percentage_count ?? 0);
+                                const pendingPctAmount = Number(bucketData.pending_percentage_amount ?? 0);
                                 
-                                // Total cases in the month and share of cases
-                                if (overallTotalCases > 0) {
-                                    const casePercentage = (bucketData.count / overallTotalCases) * 100;
-                                    labels.push('Share of Monthly Cases: ' + 
-                                        casePercentage.toFixed(2) + '% of ' + overallTotalCases.toLocaleString('en-IN') + ' cases');
-                                }
+                                // Total and Pending Cases
+                                labels.push('Total Cases: ' + totalCases.toLocaleString('en-IN') + ' cases');
+                                labels.push('Pending Cases: ' + pendingCases.toLocaleString('en-IN') + ' cases');
                                 
-                                // Overall repayment/collection context (optional informative)
-                                if (overallTotalRepaymentAmount > 0) {
-                                    labels.push('Total Monthly Repayment (₹): ₹' + 
-                                        overallTotalRepaymentAmount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
-                                }
-                                if (overallTotalCollectedAmount > 0) {
-                                    labels.push('Total Monthly Collection (₹): ₹' + 
-                                        overallTotalCollectedAmount.toLocaleString('en-IN', {maximumFractionDigits: 0}));
-                                }
+                                // Portfolio Contribution Metrics
+                                labels.push('Pending % (Count): ' + pendingPctCount.toFixed(2) + '%');
+                                labels.push('Pending % (Amount): ' + pendingPctAmount.toFixed(2) + '%');
                                 
                                 return labels;
                             }

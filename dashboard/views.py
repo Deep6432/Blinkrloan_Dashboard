@@ -2121,76 +2121,85 @@ def api_fraud_pending_cases_by_amount(request):
         for bucket in bucket_order:
             bucket_data[bucket] = {
                 'bucket': bucket,
-                'count': 0,
+                'count': 0,  # Pending cases
+                'total_count': 0,  # All cases in this bucket
                 'total_pending_amount': Decimal('0'),
                 'total_repayment_amount': Decimal('0'),
-                'total_collected_amount': Decimal('0')
+                'total_collected_amount': Decimal('0'),
+                'pending_count': 0  # Alias for clarity when calculating percentages
             }
         
-        # Calculate overall aggregates across all buckets
+        # Calculate overall totals across all buckets
         overall_total_pending_amount = Decimal('0')
-        overall_total_repayment_amount = Decimal('0')
-        overall_total_collected_amount = Decimal('0')
-        overall_total_cases = 0
+        overall_total_loans_count = 0
         
         # Process records
         for record in filtered_records:
-            # Only count cases with closed_status = 'Not Closed'
-            closed_status = record.get('closed_status', '')
-            if closed_status != 'Not Closed':
-                continue
-            
             repayment_amount = safe_decimal_conversion(record.get('repayment_amount', 0))
             total_received = safe_decimal_conversion(record.get('total_received', 0))
+            closed_status = record.get('closed_status', '')
             
-            # Calculate pending amount as repayment_amount - total_received
-            # This matches the KPI card calculation: pending_collection = repayment_amount - collected_amount
-            pending_amount = repayment_amount - total_received
-            
-            # Ensure pending amount is not negative (if overpaid, pending is 0)
-            if pending_amount < 0:
-                pending_amount = Decimal('0')
-            
-            # Add to overall totals
-            overall_total_pending_amount += pending_amount
-            overall_total_repayment_amount += repayment_amount
-            overall_total_collected_amount += total_received
-            overall_total_cases += 1
-            
-            # Count all "Not Closed" cases, regardless of pending amount or repayment amount
             # Use repayment_amount to determine bucket (in thousands)
-            # For cases with repayment_amount <= 0, use 0 for bucketing
             repayment_for_bucket = max(repayment_amount, Decimal('0'))
             repayment_in_k = float(repayment_for_bucket) / 1000
             bucket = get_amount_bucket(repayment_in_k)
             
-            if bucket and bucket in bucket_data:
-                bucket_data[bucket]['count'] += 1
-                # Add repayment amount and collected amount for all cases
-                bucket_data[bucket]['total_repayment_amount'] += repayment_amount
-                bucket_data[bucket]['total_collected_amount'] += total_received
-                # Add pending amount for all cases
-                # This ensures: total_pending_amount + total_collected_amount = total_repayment_amount
+            if not bucket or bucket not in bucket_data:
+                continue
+            
+            # Update totals for all loans in this bucket
+            overall_total_loans_count += 1
+            bucket_data[bucket]['total_count'] += 1
+            bucket_data[bucket]['total_repayment_amount'] += repayment_amount
+            bucket_data[bucket]['total_collected_amount'] += total_received
+            
+            # Calculate pending amount (only relevant for not closed cases)
+            pending_amount = repayment_amount - total_received
+            if pending_amount < 0:
+                pending_amount = Decimal('0')
+            
+            if closed_status == 'Not Closed':
+                bucket_data[bucket]['count'] += 1  # Pending cases (kept for backward compatibility)
+                bucket_data[bucket]['pending_count'] += 1
                 bucket_data[bucket]['total_pending_amount'] += pending_amount
+                overall_total_pending_amount += pending_amount
         
         # Convert to list and format
         result = []
         for bucket in bucket_order:
             if bucket in bucket_data:
+                bucket_info = bucket_data[bucket]
+                total_count = bucket_info['total_count']
+                pending_count = bucket_info['pending_count']
+                total_pending_amount = bucket_info['total_pending_amount']
+                total_repayment_amount = bucket_info['total_repayment_amount']
+                
+                percentage_of_total_loans_count = (
+                    float(total_count / overall_total_loans_count * 100) if overall_total_loans_count > 0 else 0.0
+                )
+                pending_percentage_count = (
+                    float(pending_count / total_count * 100) if total_count > 0 else 0.0
+                )
+                pending_percentage_amount = (
+                    float(total_pending_amount / total_repayment_amount * 100)
+                    if total_repayment_amount > 0 else 0.0
+                )
+                
                 result.append({
-                    'bucket': bucket_data[bucket]['bucket'],
-                    'count': bucket_data[bucket]['count'],
-                    'total_pending_amount': float(bucket_data[bucket]['total_pending_amount']),
-                    'total_repayment_amount': float(bucket_data[bucket]['total_repayment_amount']),
-                    'total_collected_amount': float(bucket_data[bucket]['total_collected_amount'])
+                    'bucket': bucket_info['bucket'],
+                    'count': bucket_info['count'],  # Pending cases
+                    'pending_count': pending_count,
+                    'total_count': total_count,
+                    'total_pending_amount': float(total_pending_amount),
+                    'total_repayment_amount': float(total_repayment_amount),
+                    'total_collected_amount': float(bucket_info['total_collected_amount']),
+                    'pending_percentage_count': pending_percentage_count,
+                    'pending_percentage_amount': pending_percentage_amount
                 })
         
         return JsonResponse({
             'buckets': result,
-            'overall_total_pending_amount': float(overall_total_pending_amount),
-            'overall_total_repayment_amount': float(overall_total_repayment_amount),
-            'overall_total_collected_amount': float(overall_total_collected_amount),
-            'overall_total_cases': overall_total_cases
+            'overall_total_pending_amount': float(overall_total_pending_amount)
         })
         
     except Exception as e:
