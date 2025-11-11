@@ -169,6 +169,15 @@ if (window.history.replaceState) {
                         <span class="sm:hidden">Daily Perf</span>
                     </div>
                 </button>
+                <button id="creditPersonTab" onclick="switchTab('creditPerson')" class="flex-1 px-1 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded-md transition-colors tab-button">
+                    <div class="flex items-center justify-center gap-1 sm:gap-2">
+                        <svg class="h-3 w-3 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0zm6 1a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="hidden sm:inline">Credit Person Wise</span>
+                        <span class="sm:hidden">Credit</span>
+                    </div>
+                </button>
             </div>
         </div>
 
@@ -3229,6 +3238,9 @@ function setupAutoRefresh() {
                 // Refresh Loan Count Wise tab
                 await loadLoanCountData();
                 console.log('Loan Count Wise tab data refreshed successfully');
+            } else if (activeTab === 'creditPerson') {
+                // Placeholder for future credit person wise data refresh logic
+                console.log('Credit Person Wise tab - no data refresh implemented yet');
             }
             
         } catch (error) {
@@ -4340,6 +4352,11 @@ function switchTab(tabName) {
     // Initialize daily performance tab if it's being switched to
     if (tabName === 'dailyPerformance') {
         console.log('Switching to daily performance tab - static UI only');
+    }
+
+    // Initialize credit person tab if it's being switched to
+    if (tabName === 'creditPerson') {
+        console.log('Switching to credit person tab - ready for implementation');
     }
     
     // Initialize loan count tab if it's being switched to
@@ -5940,6 +5957,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         </div> <!-- End Daily Performance Metrics Tab -->
+
+        <!-- Credit Person Wise Tab -->
+        <div id="creditPersonContent" class="tab-content hidden">
+            <div class="text-center py-12">
+                <div class="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 inline-block mb-4">
+                    <svg class="h-12 w-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0zm6 1a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Credit Person Wise Performance</h2>
+                <p class="text-gray-400 mb-6">Monitor allocations, recoveries, and follow-up status by credit personnel.</p>
+                <div class="text-sm text-gray-500">Ready for implementation – integrate API endpoints to visualize credit officer productivity and pending workloads.</div>
+            </div>
+        </div> <!-- End Credit Person Wise Tab -->
 
     </div>
 </div>
