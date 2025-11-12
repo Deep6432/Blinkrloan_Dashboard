@@ -4417,7 +4417,9 @@ function aggregateCreditPersonData(records) {
                 loanAmount: 0,
                 repaymentAmount: 0,
                 receivedAmount: 0,
-                pendingAmount: 0
+                pendingAmount: 0,
+                freshPendingAmount: 0,
+                reloanPendingAmount: 0
             });
         }
 
@@ -4444,6 +4446,11 @@ function aggregateCreditPersonData(records) {
         entry.repaymentAmount += repaymentAmount;
         entry.receivedAmount += receivedAmount;
         entry.pendingAmount += pendingAmount;
+        if (isReloanCase) {
+            entry.reloanPendingAmount += pendingAmount;
+        } else {
+            entry.freshPendingAmount += pendingAmount;
+        }
 
         const closedStatus = (record.closed_status || record.loan_status || '').toLowerCase();
         if (closedStatus === 'not closed') {
@@ -4475,9 +4482,21 @@ function renderCreditPersonSummary(data) {
             acc.repaymentAmount += item.repaymentAmount;
             acc.receivedAmount += item.receivedAmount;
             acc.pendingAmount += item.pendingAmount;
+            acc.freshPendingAmount += item.freshPendingAmount ?? 0;
+            acc.reloanPendingAmount += item.reloanPendingAmount ?? 0;
             return acc;
         },
-        { totalLoans: 0, freshLoans: 0, reloanLoans: 0, recoveredLoans: 0, repaymentAmount: 0, receivedAmount: 0, pendingAmount: 0 }
+        {
+            totalLoans: 0,
+            freshLoans: 0,
+            reloanLoans: 0,
+            recoveredLoans: 0,
+            repaymentAmount: 0,
+            receivedAmount: 0,
+            pendingAmount: 0,
+            freshPendingAmount: 0,
+            reloanPendingAmount: 0
+        }
     );
 
     const overallRecoveryRate = totals.repaymentAmount > 0 ? (totals.receivedAmount / totals.repaymentAmount) * 100 : 0;
@@ -4502,7 +4521,19 @@ function renderCreditPersonSummary(data) {
         `;
     }
     if (recoveryRateEl) recoveryRateEl.textContent = `${overallRecoveryRate.toFixed(1)}%`;
-    if (pendingAmountEl) pendingAmountEl.textContent = formatCurrency(totals.pendingAmount);
+    if (pendingAmountEl) {
+        pendingAmountEl.innerHTML = `
+            <span class="text-2xl font-semibold text-white">${formatCurrency(totals.pendingAmount)}</span>
+            <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Fresh: ${formatCurrency(totals.freshPendingAmount)}
+                </span>
+                <span class="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    Reloan: ${formatCurrency(totals.reloanPendingAmount)}
+                </span>
+            </div>
+        `;
+    }
 }
 
 function renderCreditPersonChart(data) {
