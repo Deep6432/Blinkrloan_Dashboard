@@ -4488,7 +4488,19 @@ function renderCreditPersonSummary(data) {
     const pendingAmountEl = document.getElementById('creditPersonPendingAmount');
 
     if (officersEl) officersEl.textContent = totalOfficers.toLocaleString('en-IN');
-    if (loansEl) loansEl.textContent = totals.totalLoans.toLocaleString('en-IN');
+    if (loansEl) {
+        loansEl.innerHTML = `
+            <span class="text-2xl font-semibold text-white">${totals.totalLoans.toLocaleString('en-IN')}</span>
+            <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Fresh: ${totals.freshLoans.toLocaleString('en-IN')}
+                </span>
+                <span class="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    Reloan: ${totals.reloanLoans.toLocaleString('en-IN')}
+                </span>
+            </div>
+        `;
+    }
     if (recoveryRateEl) recoveryRateEl.textContent = `${overallRecoveryRate.toFixed(1)}%`;
     if (pendingAmountEl) pendingAmountEl.textContent = formatCurrency(totals.pendingAmount);
 }
