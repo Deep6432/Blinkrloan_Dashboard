@@ -4418,6 +4418,10 @@ function aggregateCreditPersonData(records) {
                 repaymentAmount: 0,
                 receivedAmount: 0,
                 pendingAmount: 0,
+                freshRepaymentAmount: 0,
+                reloanRepaymentAmount: 0,
+                freshReceivedAmount: 0,
+                reloanReceivedAmount: 0,
                 freshPendingAmount: 0,
                 reloanPendingAmount: 0
             });
@@ -4447,8 +4451,12 @@ function aggregateCreditPersonData(records) {
         entry.receivedAmount += receivedAmount;
         entry.pendingAmount += pendingAmount;
         if (isReloanCase) {
+            entry.reloanRepaymentAmount += repaymentAmount;
+            entry.reloanReceivedAmount += receivedAmount;
             entry.reloanPendingAmount += pendingAmount;
         } else {
+            entry.freshRepaymentAmount += repaymentAmount;
+            entry.freshReceivedAmount += receivedAmount;
             entry.freshPendingAmount += pendingAmount;
         }
 
@@ -4482,7 +4490,11 @@ function renderCreditPersonSummary(data) {
             acc.repaymentAmount += item.repaymentAmount;
             acc.receivedAmount += item.receivedAmount;
             acc.pendingAmount += item.pendingAmount;
+            acc.freshRepaymentAmount += item.freshRepaymentAmount ?? 0;
+            acc.freshReceivedAmount += item.freshReceivedAmount ?? 0;
             acc.freshPendingAmount += item.freshPendingAmount ?? 0;
+            acc.reloanRepaymentAmount += item.reloanRepaymentAmount ?? 0;
+            acc.reloanReceivedAmount += item.reloanReceivedAmount ?? 0;
             acc.reloanPendingAmount += item.reloanPendingAmount ?? 0;
             return acc;
         },
@@ -4494,7 +4506,11 @@ function renderCreditPersonSummary(data) {
             repaymentAmount: 0,
             receivedAmount: 0,
             pendingAmount: 0,
+            freshRepaymentAmount: 0,
+            freshReceivedAmount: 0,
             freshPendingAmount: 0,
+            reloanRepaymentAmount: 0,
+            reloanReceivedAmount: 0,
             reloanPendingAmount: 0
         }
     );
@@ -4520,7 +4536,25 @@ function renderCreditPersonSummary(data) {
             </div>
         `;
     }
-    if (recoveryRateEl) recoveryRateEl.textContent = `${overallRecoveryRate.toFixed(1)}%`;
+    if (recoveryRateEl) {
+        const freshRecoveryRate = totals.freshRepaymentAmount > 0
+            ? (totals.freshReceivedAmount / totals.freshRepaymentAmount) * 100
+            : 0;
+        const reloanRecoveryRate = totals.reloanRepaymentAmount > 0
+            ? (totals.reloanReceivedAmount / totals.reloanRepaymentAmount) * 100
+            : 0;
+        recoveryRateEl.innerHTML = `
+            <span class="text-2xl font-semibold text-white">${overallRecoveryRate.toFixed(1)}%</span>
+            <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Fresh: ${freshRecoveryRate.toFixed(1)}%
+                </span>
+                <span class="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                    Reloan: ${reloanRecoveryRate.toFixed(1)}%
+                </span>
+            </div>
+        `;
+    }
     if (pendingAmountEl) {
         pendingAmountEl.innerHTML = `
             <span class="text-2xl font-semibold text-white">${formatCurrency(totals.pendingAmount)}</span>
