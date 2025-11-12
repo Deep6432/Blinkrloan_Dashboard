@@ -2595,6 +2595,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Setup auto-filter functionality AFTER restoring filters
     setupAutoFilters();
     
+    // Ensure credit person tab has default date range
+    setDefaultCreditPersonDates();
+    
     setupAutoRefresh(); // Enable auto-refresh every 10 seconds
     
     // Setup DPD search functionality
@@ -3239,8 +3242,8 @@ function setupAutoRefresh() {
                 await loadLoanCountData();
                 console.log('Loan Count Wise tab data refreshed successfully');
             } else if (activeTab === 'creditPerson') {
-                // Placeholder for future credit person wise data refresh logic
-                console.log('Credit Person Wise tab - no data refresh implemented yet');
+                await loadCreditPersonData();
+                console.log('Credit Person Wise tab data refreshed successfully');
             }
             
         } catch (error) {
@@ -4271,6 +4274,451 @@ function resetLoanCountFilters() {
     loadLoanCountData();
 }
 
+// ===============================
+// CREDIT PERSON WISE TAB FUNCTIONALITY
+// ===============================
+
+const CREDIT_PERSON_API_BASE = '/api/credit-person-wise/';
+
+function setDefaultCreditPersonDates() {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    const startDateInput = document.getElementById('creditPersonStartDate');
+    const endDateInput = document.getElementById('creditPersonEndDate');
+    
+    if (startDateInput && !startDateInput.value) {
+        startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+    }
+    if (endDateInput && !endDateInput.value) {
+        endDateInput.value = today.toISOString().split('T')[0];
+    }
+}
+
+function getCreditPersonDateRange() {
+    const startInput = document.getElementById('creditPersonStartDate');
+    const endInput = document.getElementById('creditPersonEndDate');
+    return {
+        startDate: startInput?.value,
+        endDate: endInput?.value
+    };
+}
+
+function getCreditPersonLoanType() {
+    const loanTypeInput = document.getElementById('creditPersonLoanType');
+    return loanTypeInput?.value || 'all';
+}
+
+async function loadCreditPersonData() {
+    const loadingEl = document.getElementById('creditPersonLoading');
+    const errorEl = document.getElementById('creditPersonError');
+    const errorMessageEl = document.getElementById('creditPersonErrorMessage');
+    const noDataEl = document.getElementById('creditPersonNoData');
+    const dataSectionEl = document.getElementById('creditPersonDataSection');
+
+    const { startDate, endDate } = getCreditPersonDateRange();
+    const loanType = getCreditPersonLoanType();
+
+    loadingEl?.classList.remove('hidden');
+    errorEl?.classList.add('hidden');
+    noDataEl?.classList.add('hidden');
+    dataSectionEl?.classList.add('hidden');
+
+    if (!startDate || !endDate) {
+        loadingEl?.classList.add('hidden');
+        alert('Please select both start and end dates for Credit Person Wise data.');
+        return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+        loadingEl?.classList.add('hidden');
+        alert('Start date must be before end date for Credit Person Wise data.');
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams({
+            start_date: startDate,
+            end_date: endDate
+        });
+
+        const response = await fetch(`${CREDIT_PERSON_API_BASE}?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error(`API responded with status ${response.status}`);
+        }
+
+        const apiData = await response.json();
+        let records = Array.isArray(apiData?.data) ? apiData.data : [];
+
+        if (!records.length) {
+            noDataEl?.classList.remove('hidden');
+            return;
+        }
+
+        records = records.filter(record => {
+            const isReloan = record.is_reloan_case === true || record.is_reloan_case === 'true';
+            if (loanType === 'fresh') {
+                return !isReloan;
+            }
+            if (loanType === 'reloan') {
+                return isReloan;
+            }
+            return true;
+        });
+
+        if (!records.length) {
+            noDataEl?.classList.remove('hidden');
+            return;
+        }
+
+        const aggregated = aggregateCreditPersonData(records);
+        if (!aggregated.length) {
+            noDataEl?.classList.remove('hidden');
+            return;
+        }
+
+        renderCreditPersonSummary(aggregated);
+        renderCreditPersonChart(aggregated);
+        renderCreditPersonTable(aggregated);
+
+        dataSectionEl?.classList.remove('hidden');
+    } catch (error) {
+        console.error('Error loading credit person data:', error);
+        if (errorMessageEl) {
+            errorMessageEl.textContent = error.message || 'Failed to load data. Please try again later.';
+        }
+        errorEl?.classList.remove('hidden');
+    } finally {
+        loadingEl?.classList.add('hidden');
+    }
+}
+
+function aggregateCreditPersonData(records) {
+    const creditMap = new Map();
+
+    records.forEach(record => {
+        const preferredAssignee =
+            (record.assigned_at_audit_stage && record.assigned_at_audit_stage.trim() && record.assigned_at_audit_stage.trim() !== 'Not Assigned' ? record.assigned_at_audit_stage.trim() : null) ||
+            (record.assigned_at_bre_stage && record.assigned_at_bre_stage.trim() && record.assigned_at_bre_stage.trim() !== 'Not Assigned' ? record.assigned_at_bre_stage.trim() : null) ||
+            (record.assigned_at_partial_stage && record.assigned_at_partial_stage.trim() && record.assigned_at_partial_stage.trim() !== 'Not Assigned' ? record.assigned_at_partial_stage.trim() : null) ||
+            'Unassigned';
+
+        const key = preferredAssignee;
+
+        if (!creditMap.has(key)) {
+            creditMap.set(key, {
+                person: key,
+                totalLoans: 0,
+                recoveredLoans: 0,
+                notRecoveredLoans: 0,
+                freshLoans: 0,
+                reloanLoans: 0,
+                loanAmount: 0,
+                repaymentAmount: 0,
+                receivedAmount: 0,
+                pendingAmount: 0
+            });
+        }
+
+        const entry = creditMap.get(key);
+        entry.totalLoans += 1;
+
+        const isReloanCase = record.is_reloan_case === true || record.is_reloan_case === 'true';
+        if (isReloanCase) {
+            entry.reloanLoans += 1;
+        } else {
+            entry.freshLoans += 1;
+        }
+
+        const rawLoanAmount = record.loan_amount ?? record.net_disbursal ?? record.disbursed_amount;
+        const rawRepaymentAmount = record.repayment_amount ?? record.total_repayment ?? record.repaymentAmount;
+        const rawReceivedAmount = record.received_amount ?? record.total_received ?? record.collected_amount ?? record.receivedAmount;
+
+        const loanAmount = parseFloat(rawLoanAmount ?? 0) || 0;
+        const repaymentAmount = parseFloat(rawRepaymentAmount ?? 0) || 0;
+        const receivedAmount = parseFloat(rawReceivedAmount ?? 0) || 0;
+        const pendingAmount = Math.max(repaymentAmount - receivedAmount, 0);
+
+        entry.loanAmount += loanAmount;
+        entry.repaymentAmount += repaymentAmount;
+        entry.receivedAmount += receivedAmount;
+        entry.pendingAmount += pendingAmount;
+
+        const closedStatus = (record.closed_status || record.loan_status || '').toLowerCase();
+        if (closedStatus === 'not closed') {
+            entry.notRecoveredLoans += 1;
+        } else if (closedStatus) {
+            entry.recoveredLoans += 1;
+        } else {
+            entry.recoveredLoans += 1;
+        }
+    });
+
+    return Array.from(creditMap.values())
+        .map(entry => {
+            entry.recoveryRate = entry.repaymentAmount > 0 ? (entry.receivedAmount / entry.repaymentAmount) * 100 : 0;
+            entry.pendingRate = entry.repaymentAmount > 0 ? (entry.pendingAmount / entry.repaymentAmount) * 100 : 0;
+            return entry;
+        })
+        .sort((a, b) => b.pendingAmount - a.pendingAmount);
+}
+
+function renderCreditPersonSummary(data) {
+    const totalOfficers = data.length;
+    const totals = data.reduce(
+        (acc, item) => {
+            acc.totalLoans += item.totalLoans;
+            acc.freshLoans += item.freshLoans;
+            acc.reloanLoans += item.reloanLoans;
+            acc.recoveredLoans += item.recoveredLoans;
+            acc.repaymentAmount += item.repaymentAmount;
+            acc.receivedAmount += item.receivedAmount;
+            acc.pendingAmount += item.pendingAmount;
+            return acc;
+        },
+        { totalLoans: 0, freshLoans: 0, reloanLoans: 0, recoveredLoans: 0, repaymentAmount: 0, receivedAmount: 0, pendingAmount: 0 }
+    );
+
+    const overallRecoveryRate = totals.repaymentAmount > 0 ? (totals.receivedAmount / totals.repaymentAmount) * 100 : 0;
+
+    const officersEl = document.getElementById('creditPersonTotalOfficers');
+    const loansEl = document.getElementById('creditPersonTotalLoans');
+    const recoveryRateEl = document.getElementById('creditPersonRecoveryRate');
+    const pendingAmountEl = document.getElementById('creditPersonPendingAmount');
+
+    if (officersEl) officersEl.textContent = totalOfficers.toLocaleString('en-IN');
+    if (loansEl) loansEl.textContent = totals.totalLoans.toLocaleString('en-IN');
+    if (recoveryRateEl) recoveryRateEl.textContent = `${overallRecoveryRate.toFixed(1)}%`;
+    if (pendingAmountEl) pendingAmountEl.textContent = formatCurrency(totals.pendingAmount);
+}
+
+function renderCreditPersonChart(data) {
+    const canvas = document.getElementById('creditPersonChart');
+    if (!canvas) {
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const topData = data.slice(0, 10);
+    const labels = topData.map(item => item.person);
+    const pendingValues = topData.map(item => Number(item.pendingAmount.toFixed(2)));
+    const collectedValues = topData.map(item => Number(item.receivedAmount.toFixed(2)));
+    const creditPersonDataMap = {};
+    topData.forEach(item => {
+        creditPersonDataMap[item.person] = item;
+    });
+
+    if (window.creditPersonChartInstance) {
+        window.creditPersonChartInstance.destroy();
+    }
+
+    const axisFormatter = value => {
+        if (value >= 10000000) return '₹' + (value / 10000000).toFixed(1) + ' Cr';
+        if (value >= 100000) return '₹' + (value / 100000).toFixed(1) + ' L';
+        if (value >= 1000) return '₹' + (value / 1000).toFixed(1) + ' K';
+        return '₹' + value.toLocaleString('en-IN');
+    };
+
+    window.creditPersonChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Pending Amount (₹)',
+                    data: pendingValues,
+                    backgroundColor: 'rgba(248, 113, 113, 0.85)',
+                    borderColor: 'rgba(248, 113, 113, 1)',
+                    borderWidth: 1,
+                    order: 2
+                },
+                {
+                    label: 'Collected Amount (₹)',
+                    data: collectedValues,
+                    backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 1,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#d1d5db',
+                        font: {
+                            family: 'Inter, sans-serif',
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    borderColor: '#1f2937',
+                    borderWidth: 1,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0]?.label || '';
+                        },
+                        label: function(context) {
+                            const label = context.dataset.label || '';
+                            return `${label}: ${formatCurrency(context.parsed.y)}`;
+                        },
+                        afterBody: function(context) {
+                            const label = context[0]?.label;
+                            const info = creditPersonDataMap[label];
+                            if (!info) {
+                                return [];
+                            }
+                            const repaymentAmount = info.repaymentAmount || 0;
+                            const collectionPercent = repaymentAmount > 0 ? (info.receivedAmount / repaymentAmount) * 100 : 0;
+                            return [
+                                `Repayment Amount: ${formatCurrency(repaymentAmount)}`,
+                                `Collection %: ${collectionPercent.toFixed(1)}%`
+                            ];
+                        }
+                    }
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#d1d5db',
+                    font: {
+                        weight: '600',
+                        size: 10
+                    },
+                    formatter: value => formatCurrency(value)
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#9ca3af',
+                        font: {
+                            family: 'Inter, sans-serif'
+                        }
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: '#9ca3af',
+                        callback: value => axisFormatter(value)
+                    },
+                    grid: {
+                        color: 'rgba(75, 85, 99, 0.2)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderCreditPersonTable(data) {
+    const tbody = document.getElementById('creditPersonTableBody');
+    if (!tbody) {
+        return;
+    }
+
+    tbody.innerHTML = '';
+
+    const totals = {
+        totalLoans: 0,
+        freshLoans: 0,
+        reloanLoans: 0,
+        recoveredLoans: 0,
+        notRecoveredLoans: 0,
+        loanAmount: 0,
+        repaymentAmount: 0,
+        receivedAmount: 0,
+        pendingAmount: 0
+    };
+
+    data.forEach(item => {
+        totals.totalLoans += item.totalLoans;
+        totals.freshLoans += item.freshLoans;
+        totals.reloanLoans += item.reloanLoans;
+        totals.recoveredLoans += item.recoveredLoans;
+        totals.notRecoveredLoans += item.notRecoveredLoans;
+        totals.loanAmount += item.loanAmount;
+        totals.repaymentAmount += item.repaymentAmount;
+        totals.receivedAmount += item.receivedAmount;
+        totals.pendingAmount += item.pendingAmount;
+
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-800 hover:bg-gray-800/30 transition-colors';
+        row.innerHTML = `
+            <td class="py-3 px-4 text-sm font-medium text-white">${item.person}</td>
+            <td class="py-3 px-4 text-right text-gray-300">
+                <div class="flex flex-col items-end space-y-1">
+                    <span class="text-sm font-semibold text-foreground">${item.totalLoans.toLocaleString('en-IN')} total</span>
+                    <span class="text-xs text-emerald-300">Fresh: ${item.freshLoans.toLocaleString('en-IN')}</span>
+                    <span class="text-xs text-amber-300">Reloan: ${item.reloanLoans.toLocaleString('en-IN')}</span>
+                </div>
+            </td>
+            <td class="py-3 px-4 text-right text-green-400">${item.recoveredLoans.toLocaleString('en-IN')}</td>
+            <td class="py-3 px-4 text-right text-red-400">${item.notRecoveredLoans.toLocaleString('en-IN')}</td>
+            <td class="py-3 px-4 text-right text-blue-300">${item.recoveryRate.toFixed(1)}%</td>
+            <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(item.loanAmount)}</td>
+            <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(item.repaymentAmount)}</td>
+            <td class="py-3 px-4 text-right text-green-400">${formatCurrency(item.receivedAmount)}</td>
+            <td class="py-3 px-4 text-right text-red-400">${formatCurrency(item.pendingAmount)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    const totalsRow = document.createElement('tr');
+    totalsRow.className = 'border-t-2 border-border bg-gray-900/40';
+    const recoveryRate = totals.repaymentAmount > 0 ? (totals.receivedAmount / totals.repaymentAmount) * 100 : 0;
+
+    totalsRow.innerHTML = `
+        <td class="py-3 px-4 font-semibold text-foreground">Total</td>
+        <td class="py-3 px-4 text-right font-semibold text-foreground">
+            <div class="flex flex-col items-end space-y-0.5">
+                <span>${totals.totalLoans.toLocaleString('en-IN')} total</span>
+                <span class="text-xs text-emerald-300 font-normal">Fresh: ${totals.freshLoans.toLocaleString('en-IN')}</span>
+                <span class="text-xs text-amber-300 font-normal">Reloan: ${totals.reloanLoans.toLocaleString('en-IN')}</span>
+            </div>
+        </td>
+        <td class="py-3 px-4 text-right font-semibold text-green-400">${totals.recoveredLoans.toLocaleString('en-IN')}</td>
+        <td class="py-3 px-4 text-right font-semibold text-red-400">${totals.notRecoveredLoans.toLocaleString('en-IN')}</td>
+        <td class="py-3 px-4 text-right font-semibold text-blue-300">${recoveryRate.toFixed(1)}%</td>
+        <td class="py-3 px-4 text-right font-semibold text-foreground">${formatCurrency(totals.loanAmount)}</td>
+        <td class="py-3 px-4 text-right font-semibold text-foreground">${formatCurrency(totals.repaymentAmount)}</td>
+        <td class="py-3 px-4 text-right font-semibold text-green-400">${formatCurrency(totals.receivedAmount)}</td>
+        <td class="py-3 px-4 text-right font-semibold text-red-400">${formatCurrency(totals.pendingAmount)}</td>
+    `;
+
+    tbody.appendChild(totalsRow);
+}
+
+function applyCreditPersonFilters() {
+    loadCreditPersonData();
+}
+
+function resetCreditPersonFilters() {
+    const startInput = document.getElementById('creditPersonStartDate');
+    const endInput = document.getElementById('creditPersonEndDate');
+    const loanTypeInput = document.getElementById('creditPersonLoanType');
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
+    if (loanTypeInput) loanTypeInput.value = 'all';
+    setDefaultCreditPersonDates();
+    loadCreditPersonData();
+}
+
 // Global debug function for testing
 window.testLoanCountTab = function() {
     console.log('=== TESTING LOAN COUNT TAB ===');
@@ -4356,7 +4804,9 @@ function switchTab(tabName) {
 
     // Initialize credit person tab if it's being switched to
     if (tabName === 'creditPerson') {
-        console.log('Switching to credit person tab - ready for implementation');
+        console.log('Switching to credit person tab, loading data...');
+        setDefaultCreditPersonDates();
+        loadCreditPersonData();
     }
     
     // Initialize loan count tab if it's being switched to
@@ -5666,17 +6116,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         </div> <!-- End Collection With Fraud Tab -->
         <!-- Loan Count Wise Tab -->
-        <div id="loanCountContent" class="tab-content hidden"><!-- Coming Soon Banner -->
-        <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
-                <div class="flex items-center justify-center gap-3 mb-2">
-                    <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <h3 class="text-3xl font-bold text-yellow-400">COMING SOON</h3>
-                </div>
-                <p class="text-gray-300 text-lg">This feature is under development and will be available shortly</p>
-            </div>
-
+        <div id="loanCountContent" class="tab-content hidden">
             <!-- Header with Date Filters -->
             <div class="card mb-6">
                 <div class="p-6">
@@ -5960,15 +6400,211 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Credit Person Wise Tab -->
         <div id="creditPersonContent" class="tab-content hidden">
-            <div class="text-center py-12">
-                <div class="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 inline-block mb-4">
-                    <svg class="h-12 w-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0zm6 1a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
+            <!-- Filters -->
+            <div class="card mb-6">
+                <div class="p-6">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white mb-1">Credit Person Wise Performance</h2>
+                            <p class="text-sm text-gray-400">Track recovery progress and pending exposure by assigned credit officers.</p>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-400 whitespace-nowrap">Start Date:</label>
+                                <input type="date" id="creditPersonStartDate" class="input-field text-sm px-3 py-2">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-400 whitespace-nowrap">End Date:</label>
+                                <input type="date" id="creditPersonEndDate" class="input-field text-sm px-3 py-2">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-400 whitespace-nowrap">Loan Type:</label>
+                                <select id="creditPersonLoanType" class="input-field text-sm px-3 py-2">
+                                    <option value="all">All</option>
+                                    <option value="fresh">Fresh</option>
+                                    <option value="reloan">Reloan</option>
+                                </select>
+                            </div>
+                            <button onclick="applyCreditPersonFilters()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">
+                                <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                                Apply
+                            </button>
+                            <button onclick="resetCreditPersonFilters()" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-xs text-gray-500">Assignments prioritise the audit stage. When unavailable, BRE or partial-stage ownership is used; otherwise cases are marked as <span class="text-emerald-300">Unassigned</span>.</p>
                 </div>
-                <h2 class="text-2xl font-bold text-white mb-2">Credit Person Wise Performance</h2>
-                <p class="text-gray-400 mb-6">Monitor allocations, recoveries, and follow-up status by credit personnel.</p>
-                <div class="text-sm text-gray-500">Ready for implementation – integrate API endpoints to visualize credit officer productivity and pending workloads.</div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="creditPersonLoading" class="hidden">
+                <div class="card p-12">
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-4"></div>
+                        <p class="text-gray-400">Loading credit person data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="creditPersonError" class="hidden">
+                <div class="card p-6">
+                    <div class="flex items-center gap-3 text-red-400">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Unable to load credit person data</h3>
+                            <p class="text-gray-400 text-sm" id="creditPersonErrorMessage">Please try again in a few minutes.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- No Data State -->
+            <div id="creditPersonNoData" class="hidden">
+                <div class="card p-12">
+                    <div class="flex flex-col items-center justify-center">
+                        <svg class="h-16 w-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <h3 class="text-lg font-semibold text-white mb-2">No Data Found</h3>
+                        <p class="text-gray-400 text-center">No credit person assignments found for the selected range.<br>Adjust the dates to widen your search.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Section -->
+            <div id="creditPersonDataSection" class="hidden space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div class="card bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-emerald-500/10 border border-emerald-500/20">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-400">Credit Officers</p>
+                                    <p class="text-2xl font-semibold text-white" id="creditPersonTotalOfficers">-</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                                    <svg class="h-6 w-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0zm6 1a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card bg-gradient-to-br from-sky-500/10 via-sky-500/5 to-sky-500/10 border border-sky-500/20">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-400">Loans Monitored</p>
+                                    <p class="text-2xl font-semibold text-white" id="creditPersonTotalLoans">-</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-sky-500/20 border border-sky-500/30">
+                                    <svg class="h-6 w-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 17a4 4 0 004 4h10a4 4 0 004-4V7a4 4 0 00-4-4H7a4 4 0 00-4 4v10z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-blue-500/10 border border-blue-500/20">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-400">Overall Recovery Rate</p>
+                                    <p class="text-2xl font-semibold text-white" id="creditPersonRecoveryRate">-</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                                    <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 11V7a4 4 0 018 0v4m-9 4v-1a3 3 0 013-3h2a3 3 0 013 3v1m-9 4h10a2 2 0 002-2v-5a2 2 0 00-2-2h-1l-1.447-2.894A2 2 0 0016.764 7H7.236a2 2 0 00-1.789 1.106L4 11H3a2 2 0 00-2 2v5a2 2 0 002 2h2z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-rose-500/10 border border-rose-500/20">
+                        <div class="p-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-400">Total Pending Amount</p>
+                                    <p class="text-2xl font-semibold text-white" id="creditPersonPendingAmount">-</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-rose-500/20 border border-rose-500/30">
+                                    <svg class="h-6 w-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-emerald-500/30 shadow-lg">
+                                <svg class="h-6 w-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m5 0V9a2 2 0 00-.879-1.664l-7-4.667a2 2 0 00-2.242 0l-7 4.667A2 2 0 003 9v10a2 2 0 002 2h1"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-foreground">Pending vs Collected Amount (Top 10)</h3>
+                                <p class="text-sm text-muted-foreground font-medium">Visualise exposure handled by the busiest credit officers</p>
+                            </div>
+                        </div>
+                        <button onclick="openFullscreenChart('creditPersonChart', 'Pending vs Collected Amount', 'Top credit officers by outstanding exposure')" class="p-2 rounded-lg bg-gray-600/20 hover:bg-gray-600/30 border border-gray-500/20 transition-colors" title="Open in Fullscreen">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="h-96">
+                        <canvas id="creditPersonChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="card">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <svg class="h-6 w-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <h3 class="text-xl font-semibold text-white">Credit Person Portfolio Overview</h3>
+                            </div>
+                            <p class="text-xs text-gray-500">Pending = Repayment Amount − Received Amount (never negative).</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-gray-800 text-gray-300 text-sm">
+                                        <th class="py-3 px-4 text-left font-medium">Credit Person</th>
+                                        <th class="py-3 px-4 text-right font-medium">Loans</th>
+                                        <th class="py-3 px-4 text-right font-medium">Recovered</th>
+                                        <th class="py-3 px-4 text-right font-medium">Not Recovered</th>
+                                        <th class="py-3 px-4 text-right font-medium">Recovery %</th>
+                                        <th class="py-3 px-4 text-right font-medium">Loan Amount</th>
+                                        <th class="py-3 px-4 text-right font-medium">Repayment Amount</th>
+                                        <th class="py-3 px-4 text-right font-medium">Collected Amount</th>
+                                        <th class="py-3 px-4 text-right font-medium">Pending Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creditPersonTableBody">
+                                    <!-- Rows injected via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div> <!-- End Credit Person Wise Tab -->
 

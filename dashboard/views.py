@@ -23,6 +23,12 @@ import requests
 from .models import LoanRecord, MonthlyTarget
 from .services import DataSyncService
 
+CREDIT_PERSON_API_URL = getattr(
+    settings,
+    'CREDIT_PERSON_API_URL',
+    'https://backend.blinkrloan.com/insights/v1/assigne-lead-wise-data'
+)
+
 
 # Decorator to add no-cache headers to API responses
 def no_cache_api(view_func):
@@ -2063,6 +2069,46 @@ def api_fraud_city_uncollected(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@no_cache_api
+def api_credit_person_wise(request):
+    """Proxy endpoint for credit person wise data."""
+    start_date = request.GET.get('startDate') or request.GET.get('start_date')
+    end_date = request.GET.get('endDate') or request.GET.get('end_date')
+
+    if not start_date or not end_date:
+        return JsonResponse(
+            {'error': 'start_date and end_date query parameters are required.'},
+            status=400
+        )
+
+    try:
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        response = requests.get(CREDIT_PERSON_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+
+        return JsonResponse({
+            'success': payload.get('success', True),
+            'message': payload.get('message', ''),
+            'data': payload.get('data', [])
+        })
+    except requests.RequestException as exc:
+        logger.error('Error fetching credit person wise data: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Failed to fetch credit person data from external service.'},
+            status=502
+        )
+    except ValueError as exc:
+        logger.error('Invalid JSON from credit person API: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Received invalid response from external service.'},
+            status=502
+        )
 
 
 @no_cache_api

@@ -29,4 +29,6 @@ urlpatterns = [
     path('api/fraud/pending-cases-by-amount/', views.api_fraud_pending_cases_by_amount, name='api_fraud_pending_cases_by_amount'),
     # Loan Count Wise API endpoint
     path('api/loan-count-wise/', views.api_loan_count_wise, name='api_loan_count_wise'),
+    # Credit Person Wise API endpoint
+    path('api/credit-person-wise/', views.api_credit_person_wise, name='api_credit_person_wise'),
 ]
