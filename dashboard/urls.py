@@ -31,4 +31,6 @@ urlpatterns = [
     path('api/loan-count-wise/', views.api_loan_count_wise, name='api_loan_count_wise'),
     # Credit Person Wise API endpoint
     path('api/credit-person-wise/', views.api_credit_person_wise, name='api_credit_person_wise'),
+    # Not Closed Percent API endpoint
+    path('api/not-closed-percent/', views.api_not_closed_percent, name='api_not_closed_percent'),
 ]

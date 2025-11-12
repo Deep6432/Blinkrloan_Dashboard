@@ -4054,11 +4054,14 @@ async function loadLoanCountData() {
         console.log('Updating tables with data...');
         updateCountWiseTable(data.count_wise);
         updateAmountWiseTable(data.amount_wise);
-        
+
+        // Load not closed percent table
+        await loadNotClosedPercentTable(startDate, endDate);
+
         // Show tables
         console.log('Showing tables...');
         showLoanCountTables();
-        
+
         console.log('=== LOAN COUNT DATA LOADING COMPLETE ===');
         
     } catch (error) {
@@ -4209,12 +4212,165 @@ function updateAmountWiseTable(data) {
     });
 }
 
+function getLoanStageLabel(loanCount) {
+    if (loanCount === 0) {
+        return 'Fresh Loans';
+    }
+
+    const suffix = (n) => {
+        const s = ['th', 'st', 'nd', 'rd'];
+        const v = n % 100;
+        return s[(v - 20) % 10] || s[v] || s[0];
+    };
+
+    return `${loanCount}${suffix(loanCount)} Reloan`;
+}
+
+async function loadNotClosedPercentTable(startDate, endDate) {
+    const card = document.getElementById('notClosedPercentCard');
+    if (!card) {
+        return;
+    }
+
+    const loadingEl = document.getElementById('notClosedPercentLoading');
+    const errorEl = document.getElementById('notClosedPercentError');
+    const emptyEl = document.getElementById('notClosedPercentEmpty');
+    const tableWrapper = document.getElementById('notClosedPercentTableWrapper');
+    const summaryRow = document.getElementById('notClosedPercentSummaryRow');
+    const rangeEl = document.getElementById('notClosedPercentRange');
+
+    card.classList.remove('hidden');
+    if (rangeEl) {
+        rangeEl.textContent = `${startDate} → ${endDate}`;
+    }
+
+    loadingEl?.classList.remove('hidden');
+    errorEl?.classList.add('hidden');
+    emptyEl?.classList.add('hidden');
+    tableWrapper?.classList.add('hidden');
+    summaryRow?.classList.add('hidden');
+
+    try {
+        const url = `/api/not-closed-percent/?startDate=${startDate}&endDate=${endDate}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const dataset = Array.isArray(payload.data) ? payload.data : [];
+
+        updateNotClosedPercentTable(dataset);
+    } catch (error) {
+        console.error('Error loading not closed percent data:', error);
+        if (errorEl) {
+            errorEl.textContent = error.message || 'Failed to load not closed percentage data.';
+            errorEl.classList.remove('hidden');
+        }
+    } finally {
+        loadingEl?.classList.add('hidden');
+    }
+}
+
+function updateNotClosedPercentTable(data) {
+    const card = document.getElementById('notClosedPercentCard');
+    const tableWrapper = document.getElementById('notClosedPercentTableWrapper');
+    const tbody = document.getElementById('notClosedPercentTableBody');
+    const emptyEl = document.getElementById('notClosedPercentEmpty');
+    const summaryRow = document.getElementById('notClosedPercentSummaryRow');
+    const summaryValueEl = document.getElementById('notClosedPercentSummaryValue');
+    const summaryRatioEl = document.getElementById('notClosedPercentSummaryRatio');
+
+    if (!card || !tbody) {
+        return;
+    }
+
+    card.classList.remove('hidden');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+        emptyEl?.classList.remove('hidden');
+        tableWrapper?.classList.add('hidden');
+        summaryRow?.classList.add('hidden');
+        return;
+    }
+
+    emptyEl?.classList.add('hidden');
+    tableWrapper?.classList.remove('hidden');
+
+    let totalLoans = 0;
+    let totalNotClosedLoans = 0;
+    let totalRepaymentAmount = 0;
+    let totalNotClosedRepaymentAmount = 0;
+
+    data.forEach(item => {
+        const loanCount = item.loan_count ?? 0;
+        const totalLoansValue = parseInt(item.total_loans ?? 0, 10) || 0;
+        const notClosedLoansValue = parseInt(item.total_not_closed_loans ?? 0, 10) || 0;
+        const totalLoanAmount = parseFloat(item.total_loan_amount ?? 0) || 0;
+        const totalRepayment = parseFloat(item.total_repayment_amount ?? 0) || 0;
+        const notClosedLoanAmount = parseFloat(item.total_not_closed_loan_amount ?? 0) || 0;
+        const notClosedRepayment = parseFloat(item.total_not_closed_repayment_amount ?? 0) || 0;
+        const ratioPercent = item.not_closed_repayment_ratio_percent !== null && item.not_closed_repayment_ratio_percent !== undefined
+            ? parseFloat(item.not_closed_repayment_ratio_percent)
+            : null;
+
+        totalLoans += totalLoansValue;
+        totalNotClosedLoans += notClosedLoansValue;
+        totalRepaymentAmount += totalRepayment;
+        totalNotClosedRepaymentAmount += notClosedRepayment;
+
+        const stageLabel = getLoanStageLabel(loanCount);
+
+        const row = document.createElement('tr');
+        row.className = 'border-b border-gray-700 hover:bg-gray-800/50 transition-colors';
+        row.innerHTML = `
+            <td class="py-3 px-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 border border-blue-500/30 text-blue-200">
+                    ${stageLabel}
+                </span>
+                <span class="block mt-1 text-[11px] uppercase tracking-wide text-gray-500">
+                    ${loanCount === 1 ? '1 Loan' : `${loanCount} Loans`}
+                </span>
+            </td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatNumber(totalLoansValue)}</td>
+            <td class="py-3 px-4 text-right font-medium text-amber-300">${formatNumber(notClosedLoansValue)}</td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatCurrency(notClosedLoanAmount)}</td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatCurrency(notClosedRepayment)}</td>
+            <td class="py-3 px-4 text-right font-medium text-white">${formatCurrency(totalRepayment)}</td>
+            <td class="py-3 px-4 text-right font-medium ${ratioPercent !== null ? 'text-red-400' : 'text-gray-400'}">
+                ${ratioPercent !== null ? ratioPercent.toFixed(2) + '%' : '--'}
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    });
+
+    if (summaryRow) {
+        const overallRatio = totalRepaymentAmount > 0
+            ? (totalNotClosedRepaymentAmount / totalRepaymentAmount) * 100
+            : 0;
+
+        if (summaryValueEl) {
+            summaryValueEl.textContent = `${formatNumber(totalNotClosedLoans)} not closed out of ${formatNumber(totalLoans)} loans`;
+        }
+
+        if (summaryRatioEl) {
+            summaryRatioEl.textContent = `${overallRatio.toFixed(2)}%`;
+        }
+
+        summaryRow.classList.remove('hidden');
+    }
+}
+
 // UI state management functions
 function showLoanCountLoading() {
     document.getElementById('loanCountLoading')?.classList.remove('hidden');
     document.getElementById('loanCountError')?.classList.add('hidden');
     document.getElementById('loanCountTables')?.classList.add('hidden');
     document.getElementById('loanCountNoData')?.classList.add('hidden');
+    document.getElementById('notClosedPercentCard')?.classList.add('hidden');
 }
 
 function showLoanCountTables() {
@@ -4229,6 +4385,7 @@ function showLoanCountError(message) {
     document.getElementById('loanCountError')?.classList.remove('hidden');
     document.getElementById('loanCountTables')?.classList.add('hidden');
     document.getElementById('loanCountNoData')?.classList.add('hidden');
+    document.getElementById('notClosedPercentCard')?.classList.add('hidden');
     
     const errorMessageEl = document.getElementById('loanCountErrorMessage');
     if (errorMessageEl) {
@@ -4241,6 +4398,7 @@ function showLoanCountNoData() {
     document.getElementById('loanCountError')?.classList.add('hidden');
     document.getElementById('loanCountTables')?.classList.add('hidden');
     document.getElementById('loanCountNoData')?.classList.remove('hidden');
+    document.getElementById('notClosedPercentCard')?.classList.add('hidden');
 }
 
 // Apply filters button handler
@@ -6322,6 +6480,65 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
 
+            </div>
+
+            <!-- Not Closed Percentage Table -->
+            <div class="card mt-6 hidden" id="notClosedPercentCard">
+                <div class="p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 8c-3.866 0-7 3.134-7 7a7 7 0 0014 0c0-3.866-3.134-7-7-7z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-white">Not Closed Percentage by Loan Count</h3>
+                                    <p class="text-sm text-gray-400">Share of not closed repayment against portfolio</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-sm text-gray-400">
+                            Date Range: <span class="text-white font-medium" id="notClosedPercentRange">--</span>
+                        </div>
+                    </div>
+
+                    <div id="notClosedPercentLoading" class="py-12 text-center text-gray-400">
+                        Loading not closed percentage...
+                    </div>
+                    <div id="notClosedPercentError" class="hidden py-4 text-center text-red-400 text-sm"></div>
+                    <div id="notClosedPercentEmpty" class="hidden py-4 text-center text-gray-400 text-sm"></div>
+
+                    <div id="notClosedPercentTableWrapper" class="overflow-x-auto hidden">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-600 text-gray-300 font-semibold">
+                                    <th class="text-left py-3 px-4">Loan Count</th>
+                                    <th class="text-right py-3 px-4">Total Loans</th>
+                                    <th class="text-right py-3 px-4">Not Closed Loans</th>
+                                    <th class="text-right py-3 px-4">Not Closed Loan Amount</th>
+                                    <th class="text-right py-3 px-4">Not Closed Repayment</th>
+                                    <th class="text-right py-3 px-4">Total Repayment</th>
+                                    <th class="text-right py-3 px-4">Not Closed %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="notClosedPercentTableBody">
+                                <tr>
+                                    <td colspan="7" class="py-8 text-center text-gray-400">Loading data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-gray-600 hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" id="notClosedPercentSummaryRow">
+                        <div class="text-sm text-gray-400" id="notClosedPercentSummaryValue">--</div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs uppercase tracking-wide text-gray-400">Overall Not Closed %</span>
+                            <span class="text-lg font-bold text-red-400" id="notClosedPercentSummaryRatio">--%</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- No Data State -->

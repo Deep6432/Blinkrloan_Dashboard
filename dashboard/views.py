@@ -29,6 +29,12 @@ CREDIT_PERSON_API_URL = getattr(
     'https://backend.blinkrloan.com/insights/v1/assigne-lead-wise-data'
 )
 
+NOT_CLOSED_PERCENT_API_URL = getattr(
+    settings,
+    'NOT_CLOSED_PERCENT_API_URL',
+    'https://backend.blinkrloan.com/insights/v1/not-closed-percent-against-total'
+)
+
 
 # Decorator to add no-cache headers to API responses
 def no_cache_api(view_func):
@@ -2105,6 +2111,46 @@ def api_credit_person_wise(request):
         )
     except ValueError as exc:
         logger.error('Invalid JSON from credit person API: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Received invalid response from external service.'},
+            status=502
+        )
+
+
+@no_cache_api
+def api_not_closed_percent(request):
+    """Proxy endpoint for not closed percentage data used in Loan Count Wise tab."""
+    start_date = request.GET.get('startDate') or request.GET.get('start_date')
+    end_date = request.GET.get('endDate') or request.GET.get('end_date')
+
+    if not start_date or not end_date:
+        return JsonResponse(
+            {'error': 'start_date and end_date query parameters are required.'},
+            status=400
+        )
+
+    try:
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        response = requests.get(NOT_CLOSED_PERCENT_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+
+        return JsonResponse({
+            'success': payload.get('success', True),
+            'message': payload.get('message', ''),
+            'data': payload.get('data', [])
+        })
+    except requests.RequestException as exc:
+        logger.error('Error fetching not closed percent data: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Failed to fetch not closed percent data from external service.'},
+            status=502
+        )
+    except ValueError as exc:
+        logger.error('Invalid JSON from not closed percent API: %s', exc, exc_info=True)
         return JsonResponse(
             {'error': 'Received invalid response from external service.'},
             status=502
