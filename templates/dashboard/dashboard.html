@@ -4306,14 +4306,27 @@ function updateNotClosedPercentTable(data) {
 
     data.forEach(item => {
         const loanCount = item.loan_count ?? 0;
-        const totalLoansValue = parseInt(item.total_loans ?? 0, 10) || 0;
-        const notClosedLoansValue = parseInt(item.total_not_closed_loans ?? 0, 10) || 0;
-        const totalLoanAmount = parseFloat(item.total_loan_amount ?? 0) || 0;
-        const totalRepayment = parseFloat(item.total_repayment_amount ?? 0) || 0;
-        const notClosedLoanAmount = parseFloat(item.total_not_closed_loan_amount ?? 0) || 0;
-        const notClosedRepayment = parseFloat(item.total_not_closed_repayment_amount ?? 0) || 0;
-        const ratioPercent = item.not_closed_repayment_ratio_percent !== null && item.not_closed_repayment_ratio_percent !== undefined
-            ? parseFloat(item.not_closed_repayment_ratio_percent)
+        const totalLoansValue = parseInt(item.total_loans ?? item.totalLoans ?? 0, 10) || 0;
+        const notClosedLoansValue = parseInt(item.total_not_closed_loans ?? item.totalNotClosedLoans ?? 0, 10) || 0;
+        const totalLoanAmount = parseFloat(item.total_loan_amount ?? item.totalLoanAmount ?? 0) || 0;
+        const totalRepayment = parseFloat(item.total_repayment_amount ?? item.totalRepaymentAmount ?? 0) || 0;
+        const notClosedLoanAmount = parseFloat(
+            item.total_not_closed_loan_amount ??
+            item.total_notclosed_loan_amount ??
+            item.totalNotClosedLoanAmount ??
+            0
+        ) || 0;
+        const notClosedRepayment = parseFloat(
+            item.total_not_closed_repayment_amount ??
+            item.total_notclosed_repayment_amount ??
+            item.totalNotClosedRepaymentAmount ??
+            0
+        ) || 0;
+        const rawRatio = item.not_closed_repayment_ratio_percent ??
+            item.notclosed_repayment_ratio_percent ??
+            item.notClosedRepaymentRatioPercent;
+        const ratioPercent = rawRatio !== null && rawRatio !== undefined
+            ? parseFloat(rawRatio)
             : null;
 
         totalLoans += totalLoansValue;
@@ -4329,9 +4342,6 @@ function updateNotClosedPercentTable(data) {
             <td class="py-3 px-4">
                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 border border-blue-500/30 text-blue-200">
                     ${stageLabel}
-                </span>
-                <span class="block mt-1 text-[11px] uppercase tracking-wide text-gray-500">
-                    ${loanCount === 1 ? '1 Loan' : `${loanCount} Loans`}
                 </span>
             </td>
             <td class="py-3 px-4 text-right font-medium text-white">${formatNumber(totalLoansValue)}</td>
