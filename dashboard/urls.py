@@ -33,4 +33,6 @@ urlpatterns = [
     path('api/credit-person-wise/', views.api_credit_person_wise, name='api_credit_person_wise'),
     # Not Closed Percent API endpoint
     path('api/not-closed-percent/', views.api_not_closed_percent, name='api_not_closed_percent'),
+    # Daily Performance Metrics API endpoint
+    path('api/daily-performance-metrics/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
 ]

@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.conf import settings
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
+import calendar
 
 logger = logging.getLogger(__name__)
 import json
@@ -2365,3 +2366,276 @@ def api_loan_count_wise(request):
             'count_wise': [],
             'amount_wise': []
         }, status=500)
+
+
+@csrf_exempt
+@no_cache_api
+@login_required
+def api_daily_performance_metrics(request):
+    """API endpoint for Daily Performance Metrics data"""
+    try:
+        # Handle POST request to update monthly target
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+                target_amount = data.get('monthly_target')
+                if target_amount:
+                    target_amount = str(target_amount).replace(',', '')  # Remove commas
+                    monthly_target = MonthlyTarget.set_current_month_target(target_amount)
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Monthly target updated successfully',
+                        'target_amount': float(monthly_target.target_amount)
+                    })
+            except (ValueError, InvalidOperation, json.JSONDecodeError) as e:
+                logger.error(f"Error saving monthly target: {e}", exc_info=True)
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Invalid target amount: {str(e)}'
+                }, status=400)
+            except Exception as e:
+                logger.error(f"Unexpected error saving monthly target: {e}", exc_info=True)
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Error saving monthly target: {str(e)}'
+                }, status=500)
+        
+        # Fetch data from the external API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        records = data.get('pr', [])
+        
+        # Apply filters
+        filtered_records = apply_fraud_filters(records, request)
+        
+        # Get current date and calculate month info
+        today = datetime.now().date()
+        current_month = today.month
+        current_year = today.year
+        days_in_month = calendar.monthrange(current_year, current_month)[1]
+        
+        # Calculate date ranges
+        month_start = datetime(current_year, current_month, 1).date()
+        month_end = datetime(current_year, current_month, days_in_month).date()
+        
+        # Filter records for current month
+        current_month_records = []
+        for record in filtered_records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date and month_start <= disbursal_date <= month_end:
+                current_month_records.append(record)
+        
+        # 1. SANCTION PERFORMANCE
+        # Monthly target (from database, with fallback to request parameter)
+        monthly_target_param = request.GET.get('monthly_target')
+        if monthly_target_param:
+            try:
+                # If provided in request, save to database and use it
+                target_amount = str(monthly_target_param).replace(',', '')  # Remove commas
+                target_obj = MonthlyTarget.set_current_month_target(target_amount)
+                monthly_target = target_obj.target_amount
+            except (ValueError, InvalidOperation):
+                # Fallback to database value
+                db_target = MonthlyTarget.get_current_month_target()
+                monthly_target = Decimal(str(db_target)) if db_target and db_target > 0 else Decimal('120000000')
+        else:
+            # Get from database, with default fallback
+            db_target = MonthlyTarget.get_current_month_target()
+            monthly_target = Decimal(str(db_target)) if db_target and db_target > 0 else Decimal('120000000')  # ₹12,00,00,000 default
+        
+        # Today's disbursement (sanction amount where disbursal_date is today)
+        # Check ALL records (not just filtered or current month) to get today's disbursement
+        today_disbursement = Decimal('0')
+        for record in records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date and disbursal_date == today:
+                loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
+                today_disbursement += loan_amount
+                logger.debug(f"Found today's disbursement: loan_amount={loan_amount}, disbursal_date={disbursal_date}")
+        
+        logger.info(f"Today's disbursement calculation: total={today_disbursement}, today={today}, records_checked={len(records)}")
+        
+        # Total achieved till today (sanction amount where disbursal_date <= today)
+        total_achieved = Decimal('0')
+        for record in current_month_records:
+            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
+            if disbursal_date and disbursal_date <= today:
+                total_achieved += safe_decimal_conversion(record.get('loan_amount', 0))
+        
+        # Calculate metrics
+        # Achievement % = (Figures Achieved (till today) / Target of Sanction for the current Month) * 100
+        achievement_percentage = float((total_achieved / monthly_target) * 100) if monthly_target > 0 else 0
+        yet_to_achieve = monthly_target - total_achieved
+        yet_to_achieve_percentage = float((yet_to_achieve / monthly_target) * 100) if monthly_target > 0 else 0
+        
+        days_completed = today.day
+        remaining_days = days_in_month - days_completed
+        
+        # Current daily performance (average so far)
+        current_daily_performance = total_achieved / days_completed if days_completed > 0 else Decimal('0')
+        
+        # Required daily performance to meet target
+        required_daily_performance = yet_to_achieve / remaining_days if remaining_days > 0 else Decimal('0')
+        
+        sanction_performance = {
+            'monthly_target': float(monthly_target),
+            'today_disbursement': float(today_disbursement),
+            'total_achieved': float(total_achieved),
+            'achievement_percentage': round(achievement_percentage, 2),
+            'yet_to_achieve': float(yet_to_achieve),
+            'yet_to_achieve_percentage': round(yet_to_achieve_percentage, 2),
+            'days_completed': days_completed,
+            'remaining_days': remaining_days,
+            'current_daily_performance': float(current_daily_performance),
+            'required_daily_performance': float(required_daily_performance)
+        }
+        
+        # 2. COLLECTION EFFICIENCY
+        # Fetch data from Collection WITHOUT Fraud API for collection efficiency (current month)
+        # Collection Efficiency (Current Month): Show collection percentage from 1st of current month to today
+        filtered_records_without_fraud = []
+        try:
+            response_without_fraud = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
+            response_without_fraud.raise_for_status()
+            data_without_fraud = response_without_fraud.json()
+            # Without-fraud API uses 'cwpr' key instead of 'pr'
+            records_without_fraud = data_without_fraud.get('cwpr', data_without_fraud.get('pr', []))
+            
+            # Apply filters: state, city, closing_status, DPD
+            state_filter = request.GET.get('state')
+            city_filter = request.GET.get('city')
+            
+            if state_filter:
+                records_without_fraud = [r for r in records_without_fraud if r.get('state') == state_filter]
+                if city_filter:
+                    records_without_fraud = [r for r in records_without_fraud if r.get('city', '').strip() == city_filter.strip()]
+            elif city_filter:
+                records_without_fraud = [r for r in records_without_fraud if r.get('city', '').strip() == city_filter.strip()]
+            
+            if request.GET.get('closing_status'):
+                records_without_fraud = [r for r in records_without_fraud if r.get('closed_status') == request.GET.get('closing_status')]
+            
+            if request.GET.get('dpd'):
+                records_without_fraud = [r for r in records_without_fraud if r.get('dpd_bucket') == request.GET.get('dpd')]
+            
+            # Filter by current month date range (1st of current month to today)
+            # Use repayment_date for filtering (not disbursal_date)
+            current_month_records = []
+            for record in records_without_fraud:
+                repayment_date = parse_datetime_safely(record.get('repayment_date'))
+                if repayment_date and month_start <= repayment_date <= today:
+                    current_month_records.append(record)
+            
+            # Store filtered records for historical calculation
+            filtered_records_without_fraud = records_without_fraud
+            
+            # Calculate collection efficiency for current month (Nov 1st to today)
+            repayment_amount = sum(Decimal(str(record.get('repayment_amount', 0))) for record in current_month_records)
+            total_received = sum(Decimal(str(record.get('total_received', 0))) for record in current_month_records)
+            collected_amount = total_received
+            
+            current_collection_efficiency = round(float((collected_amount / repayment_amount * 100)), 2) if repayment_amount > 0 else 0
+            
+            logger.info(f"Collection Efficiency (Current Month): Date range: {month_start} to {today}, Records: {len(current_month_records)}, Repayment: {repayment_amount}, Collected: {collected_amount}, Efficiency: {current_collection_efficiency}%")
+        except Exception as e:
+            logger.error(f"Error fetching collection efficiency: {e}", exc_info=True)
+            current_collection_efficiency = 0
+            filtered_records_without_fraud = []
+        
+        # Benchmark collection efficiency (configurable)
+        benchmark_efficiency = 85  # 85% benchmark
+        
+        collection_efficiency = {
+            'current_month_efficiency': round(current_collection_efficiency, 2),
+            'benchmark_efficiency': benchmark_efficiency
+        }
+        
+        # 3. HISTORICAL COLLECTION EFFICIENCY
+        # Calculate for completed months only (exclude current month - November)
+        # Show last 5 completed months in descending order: October, September, August, July, June
+        historical_data = []
+        
+        # OPTIMIZATION: Reuse the already-fetched records from EXTERNAL_API_URL instead of making 5 more API calls
+        # Use the records we already fetched at the beginning (line 2404-2407)
+        # This avoids making 5 additional API calls, significantly improving performance
+        
+        # Start from previous month (skip current month - November)
+        # Process months in reverse order (most recent first) so they appear in descending order
+        for i in range(1, 6):  # Start from 1 to skip current month, go back 5 months to include June and July
+            # Calculate month and year for historical data
+            if current_month - i > 0:
+                hist_month = current_month - i
+                hist_year = current_year
+            else:
+                hist_month = 12 + (current_month - i)
+                hist_year = current_year - 1
+            
+            hist_month_start = datetime(hist_year, hist_month, 1).date()
+            hist_days_in_month = calendar.monthrange(hist_year, hist_month)[1]
+            hist_month_end = datetime(hist_year, hist_month, hist_days_in_month).date()
+            
+            # Filter records for historical month (from Collection WITH Fraud API)
+            # IMPORTANT: All historical months (including June and July) use Collection WITH Fraud API
+            # OPTIMIZATION: Use the already-fetched records instead of making a new API call
+            try:
+                # Use the records we already fetched at the beginning (reuse 'records' variable)
+                # Filter by specific month date range (e.g., June 1-30, July 1-31, etc.)
+                # Use repayment_date to filter records for that specific month
+                hist_records = []
+                for record in records:  # Reuse already-fetched records
+                    repayment_date = parse_datetime_safely(record.get('repayment_date'))
+                    if repayment_date and hist_month_start <= repayment_date <= hist_month_end:
+                        hist_records.append(record)
+                
+                # Calculate using exact same method as main collection efficiency (Decimal conversion)
+                repayment_amount = sum(Decimal(str(record.get('repayment_amount', 0))) for record in hist_records)
+                total_received = sum(Decimal(str(record.get('total_received', 0))) for record in hist_records)
+                collected_amount = total_received
+                hist_efficiency = round(float((collected_amount / repayment_amount * 100)), 2) if repayment_amount > 0 else 0
+                
+                logger.info(f"Historical Collection Efficiency ({calendar.month_name[hist_month]} {hist_year}): Using cached Collection WITH Fraud API data, Date range: {hist_month_start} to {hist_month_end}, Records: {len(hist_records)}, Repayment: {repayment_amount}, Collected: {collected_amount}, Efficiency: {hist_efficiency}%")
+            except Exception as e:
+                logger.error(f"Error calculating historical collection efficiency for {hist_month}: {e}", exc_info=True)
+                # Fallback: use filtered records from without-fraud API
+                hist_records = []
+                for record in filtered_records_without_fraud:
+                    repayment_date = parse_datetime_safely(record.get('repayment_date'))
+                    if repayment_date and hist_month_start <= repayment_date <= hist_month_end:
+                        hist_records.append(record)
+                
+                repayment_amount = Decimal('0')
+                collected_amount = Decimal('0')
+                
+                for record in hist_records:
+                    repayment_amount += safe_decimal_conversion(record.get('repayment_amount', 0))
+                    collected_amount += safe_decimal_conversion(record.get('total_received', 0))
+                
+                hist_efficiency = round(float((collected_amount / repayment_amount) * 100), 2) if repayment_amount > 0 else 0
+                logger.info(f"Historical Collection Efficiency ({calendar.month_name[hist_month]} {hist_year}): Fallback calculation, Records: {len(hist_records)}, Repayment: {repayment_amount}, Collected: {collected_amount}, Efficiency: {hist_efficiency}%")
+            
+            # Set benchmark based on month (example logic)
+            hist_benchmark = 85
+            
+            month_name = calendar.month_name[hist_month]
+            # Note: hist_efficiency is already calculated and logged above in try/except blocks
+            historical_data.append({
+                'month': f"{month_name}, {hist_year}",
+                'actual': round(hist_efficiency, 2),
+                'benchmark': hist_benchmark
+            })
+        
+        # Data is already in descending order (October, September, August, July, June)
+        # No need to reverse since we process from most recent (i=1) to oldest (i=5)
+        
+        return JsonResponse({
+            'sanction_performance': sanction_performance,
+            'collection_efficiency': collection_efficiency,
+            'historical_collection_efficiency': historical_data,
+            'report_date': today.strftime('%d-%b-%y'),
+            'position_as_on': today.strftime('%d-%b-%y')  # Position as on should be today's date
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching daily performance metrics: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to fetch data'}, status=500)

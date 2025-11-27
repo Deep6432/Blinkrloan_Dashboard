@@ -858,8 +858,8 @@ if (window.history.replaceState) {
                 </div>
             <div class="h-96">
                 <canvas id="pendingCasesByAmountChart"></canvas>
-                </div>
-            </div>
+    </div>
+    </div>
 
     <!-- DPD Details Modal -->
     <div id="dpdDetailsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
@@ -2691,6 +2691,637 @@ function formatCurrency(amount) {
     }
 }
 
+// Function to format number with commas (Indian numbering system)
+// Indian numbering: last 3 digits, then groups of 2 digits
+// Example: 120000000 -> 12,00,00,000
+function formatNumberWithCommas(num) {
+    if (!num && num !== 0) return '';
+    const numStr = num.toString().replace(/,/g, '');
+    const parts = numStr.split('.');
+    let integerPart = parts[0];
+    
+    // Indian numbering system: last 3 digits, then groups of 2 digits
+    if (integerPart.length <= 3) {
+        return integerPart;
+    }
+    
+    // Reverse to work from right to left
+    const reversed = integerPart.split('').reverse().join('');
+    
+    // Take first 3 digits (last 3 in original)
+    const lastThree = reversed.substring(0, 3);
+    
+    // Take remaining and group in pairs of 2
+    const remaining = reversed.substring(3);
+    const groups = [];
+    for (let i = 0; i < remaining.length; i += 2) {
+        const group = remaining.substring(i, Math.min(i + 2, remaining.length));
+        if (group) groups.push(group);
+    }
+    
+    // Reverse the groups array (to get correct order) and reverse each group's digits
+    const reversedGroups = groups.reverse().map(g => g.split('').reverse().join(''));
+    
+    // Combine: reversed groups + comma + last three (reversed)
+    const formattedRemaining = reversedGroups.join(',');
+    const reversedLastThree = lastThree.split('').reverse().join('');
+    
+    parts[0] = formattedRemaining + (formattedRemaining ? ',' : '') + reversedLastThree;
+    
+    return parts.join('.');
+}
+
+// Function to remove commas and convert to number
+function removeCommas(str) {
+    return str.toString().replace(/,/g, '');
+}
+
+// ===============================
+// DAILY PERFORMANCE METRICS TAB FUNCTIONALITY
+// ===============================
+
+async function loadDailyPerformanceData(silentRefresh = false) {
+    try {
+        console.log('Loading daily performance metrics data...');
+        
+        // Show loading state only on initial load, not during auto-refresh
+        const loadingEl = document.getElementById('dailyPerformanceLoading');
+        const mainContentEl = document.getElementById('dailyPerformanceMainContent');
+        if (!silentRefresh) {
+            if (loadingEl) loadingEl.classList.remove('hidden');
+            if (mainContentEl) mainContentEl.classList.add('hidden');
+        }
+        
+        // Fetch data from API
+        const response = await fetch('/api/daily-performance-metrics/');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store data globally for Excel export
+        window.dailyPerformanceData = data;
+        
+        console.log('Daily performance data received:', data);
+        
+        // Hide loading state and show main content (only if we showed it)
+        if (!silentRefresh) {
+            if (loadingEl) loadingEl.classList.add('hidden');
+            if (mainContentEl) mainContentEl.classList.remove('hidden');
+        }
+        
+        // Update position date
+        if (data.position_as_on) {
+            document.getElementById('positionDate').textContent = data.position_as_on;
+        }
+        
+        // Update Sanction Performance section
+        if (data.sanction_performance) {
+            const sp = data.sanction_performance;
+            console.log('Sanction Performance Data:', sp);
+            
+            const monthlyTargetInput = document.getElementById('monthlyTargetInput');
+            if (monthlyTargetInput) {
+                // Format with commas for display (default to 12,00,00,000 if no value)
+                const targetValue = sp.monthly_target || 120000000;
+                const formattedValue = formatNumberWithCommas(targetValue);
+                monthlyTargetInput.value = formattedValue;
+            }
+            
+            // Update Today's Disbursement
+            const todayDisbursementValue = sp.today_disbursement || 0;
+            console.log('Today\'s Disbursement Value:', todayDisbursementValue);
+            const todayDisbursementEl = document.getElementById('todayDisbursement');
+            if (todayDisbursementEl) {
+                todayDisbursementEl.textContent = formatCurrency(todayDisbursementValue);
+            } else {
+                console.error('todayDisbursement element not found');
+            }
+            document.getElementById('totalAchieved').textContent = formatCurrency(sp.total_achieved || 0);
+            document.getElementById('achievementPercentage').textContent = (sp.achievement_percentage || 0).toFixed(2);
+            document.getElementById('yetToAchieve').textContent = formatCurrency(sp.yet_to_achieve || 0);
+            document.getElementById('yetToAchievePercentage').textContent = (sp.yet_to_achieve_percentage || 0).toFixed(2);
+            document.getElementById('daysCompleted').textContent = sp.days_completed || 0;
+            document.getElementById('remainingDays').textContent = sp.remaining_days || 0;
+            document.getElementById('currentDailyPerformance').textContent = formatCurrency(sp.current_daily_performance || 0);
+            document.getElementById('requiredDailyPerformance').textContent = formatCurrency(sp.required_daily_performance || 0);
+        }
+        
+        // Update Collection Efficiency section
+        if (data.collection_efficiency) {
+            const ce = data.collection_efficiency;
+            const efficiencyElement = document.getElementById('currentCollectionEfficiency');
+            if (efficiencyElement) {
+                efficiencyElement.textContent = (ce.current_month_efficiency || 0).toFixed(2) + '%';
+                // Color code based on performance
+                const efficiency = ce.current_month_efficiency || 0;
+                efficiencyElement.className = 'text-white font-semibold px-3 py-1 rounded ' + 
+                    (efficiency >= ce.benchmark_efficiency ? 'bg-green-600' : 
+                     efficiency >= ce.benchmark_efficiency * 0.8 ? 'bg-yellow-600' : 'bg-red-600');
+            }
+            document.getElementById('benchmarkEfficiency').textContent = (ce.benchmark_efficiency || 0).toFixed(0);
+        }
+        
+        // Update Historical Collection Efficiency table
+        if (data.historical_collection_efficiency && Array.isArray(data.historical_collection_efficiency)) {
+            const tbody = document.getElementById('historicalDataTable');
+            if (tbody) {
+                tbody.innerHTML = '';
+                
+                data.historical_collection_efficiency.forEach(item => {
+                    const actual = item.actual || 0;
+                    const benchmark = item.benchmark || 0;
+                    
+                    // Color code based on performance (same logic as current month)
+                    // Green: actual >= benchmark
+                    // Yellow: actual >= benchmark * 0.8 (near benchmark)
+                    // Red: actual < benchmark * 0.8
+                    let actualColorClass = '';
+                    if (actual >= benchmark) {
+                        actualColorClass = 'bg-green-600';
+                    } else if (actual >= benchmark * 0.8) {
+                        actualColorClass = 'bg-yellow-600';
+                    } else {
+                        actualColorClass = 'bg-red-600';
+                    }
+                    
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-700';
+                    row.innerHTML = `
+                        <td class="py-3 px-4 text-gray-300">${item.month || '--'}</td>
+                        <td class="py-3 px-4 text-right">
+                            <span class="text-white font-semibold px-3 py-1 rounded ${actualColorClass}">${actual.toFixed(2)}%</span>
+                        </td>
+                        <td class="py-3 px-4 text-right text-gray-300">${benchmark.toFixed(0)}%</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+        
+        console.log('Daily performance metrics data loaded successfully');
+        
+        // Store data globally for export
+        window.dailyPerformanceData = data;
+        
+    } catch (error) {
+        console.error('Error loading daily performance data:', error);
+        const loadingEl = document.getElementById('dailyPerformanceLoading');
+        const mainContentEl = document.getElementById('dailyPerformanceMainContent');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (mainContentEl) mainContentEl.classList.remove('hidden');
+        // Show error message
+        alert('Failed to load daily performance metrics. Please try again.');
+    }
+}
+
+// Function to export Performance Report to Excel with styling
+async function exportPerformanceReport() {
+    try {
+        // Check if ExcelJS is loaded, if not load it
+        if (typeof ExcelJS === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+            script.onload = () => exportPerformanceReport();
+            document.head.appendChild(script);
+            return;
+        }
+        
+        // Get current data from stored global variable or fetch fresh
+        let data = window.dailyPerformanceData;
+        if (!data) {
+            const response = await fetch('/api/daily-performance-metrics/');
+            if (!response.ok) throw new Error('Failed to fetch data');
+            data = await response.json();
+        }
+        
+        // Get current date for report
+        const today = new Date();
+        const reportDate = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        // Position as on should be today's date
+        const positionDate = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        // Create workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Performance Report');
+        
+        // Define border style for all cells
+        const borderStyle = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+        
+        let rowIndex = 1;
+        
+        // Helper function to apply borders to a cell
+        function applyBorders(cell) {
+            cell.border = borderStyle;
+            return cell;
+        }
+        
+        // Helper function to get cell with borders
+        function getCell(row, col) {
+            return applyBorders(worksheet.getCell(row, col));
+        }
+        
+        // Report Header - Bold, larger font, merged cells (A, B, C)
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 3);
+        const titleCell = worksheet.getCell(rowIndex, 1);
+        titleCell.value = 'Performance Report - BlinkR Loan';
+        titleCell.font = { bold: true, size: 14 };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        titleCell.border = borderStyle;
+        rowIndex += 2;
+        
+        // Empty row with borders (rowIndex - 1)
+        const emptyTitleRow = rowIndex - 1;
+        applyBorders(worksheet.getCell(emptyTitleRow, 1));
+        applyBorders(worksheet.getCell(emptyTitleRow, 2));
+        applyBorders(worksheet.getCell(emptyTitleRow, 3));
+        
+        // Report Date
+        const dateLabelCell = getCell(rowIndex, 1);
+        dateLabelCell.value = 'Report Date:';
+        dateLabelCell.font = { bold: false };
+        dateLabelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+        
+        const dateValueCell = getCell(rowIndex, 2);
+        dateValueCell.value = reportDate;
+        dateValueCell.font = { bold: false };
+        dateValueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        rowIndex++;
+        
+        // Position as on
+        const posLabelCell = getCell(rowIndex, 1);
+        posLabelCell.value = 'Position as on:';
+        posLabelCell.font = { bold: false };
+        posLabelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+        
+        const posValueCell = getCell(rowIndex, 2);
+        posValueCell.value = positionDate;
+        posValueCell.font = { bold: false };
+        posValueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        rowIndex += 2;
+        
+        // Empty row with borders (rowIndex - 1)
+        const emptyRow1 = rowIndex - 1;
+        applyBorders(worksheet.getCell(emptyRow1, 1));
+        applyBorders(worksheet.getCell(emptyRow1, 2));
+        
+        // Sanction Performance Section Header - Bold with light green background, merged A-C
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 3);
+        const spHeader = worksheet.getCell(rowIndex, 1);
+        spHeader.value = 'Sanction Performance';
+        spHeader.font = { bold: true, size: 12 };
+        spHeader.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' } // Light green
+        };
+        spHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        spHeader.border = borderStyle;
+        rowIndex += 2;
+        
+        // Empty row with borders (rowIndex - 1)
+        const emptySPRow = rowIndex - 1;
+        applyBorders(worksheet.getCell(emptySPRow, 1));
+        applyBorders(worksheet.getCell(emptySPRow, 2));
+        applyBorders(worksheet.getCell(emptySPRow, 3));
+        
+        // Sanction Performance Metrics
+        if (data.sanction_performance) {
+            const sp = data.sanction_performance;
+            const metrics = [
+                ['Target of Sanction for the current Month:', '₹ ' + formatCurrencyForExcel(sp.monthly_target || 0), null],
+                ['Today\'s Disbursement:', '₹ ' + formatCurrencyForExcel(sp.today_disbursement || 0), null],
+                ['Figures Achieved (till today):', '₹ ' + formatCurrencyForExcel(sp.total_achieved || 0), null],
+                ['Achievement %:', (sp.achievement_percentage || 0).toFixed(0) + '%', null],
+                ['Yet to be Achieved:', '₹ ' + formatCurrencyForExcel(sp.yet_to_achieve || 0), 'green'], // Green highlight
+                ['Yet to be Achieved %:', (sp.yet_to_achieve_percentage || 0).toFixed(0) + '%', null],
+                ['Days Completed:', sp.days_completed || 0, null],
+                ['Remaining Days:', sp.remaining_days || 0, null],
+                ['Current Daily Performance:', '₹ ' + formatCurrencyForExcel(Math.round(sp.current_daily_performance || 0)), 'red'], // Red highlight - rounded to whole number
+                ['Required Daily Performance:', '₹ ' + formatCurrencyForExcel(Math.round(sp.required_daily_performance || 0)), 'red'] // Red highlight - rounded to whole number
+            ];
+            
+            metrics.forEach(([label, value, color]) => {
+                const labelCell = getCell(rowIndex, 1);
+                labelCell.value = label;
+                labelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+                labelCell.font = { bold: false };
+                
+                const valueCell = getCell(rowIndex, 2);
+                valueCell.value = value;
+                valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                valueCell.font = { bold: false };
+                
+                if (color === 'green') {
+                    valueCell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFC8E6C9' } // Light green
+                    };
+                } else if (color === 'red') {
+                    valueCell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFCDD2' } // Light red
+                    };
+                }
+                
+                rowIndex++;
+            });
+            rowIndex += 1;
+            
+            // Empty row with borders (rowIndex - 1)
+            const emptySPDataRow = rowIndex - 1;
+            applyBorders(worksheet.getCell(emptySPDataRow, 1));
+            applyBorders(worksheet.getCell(emptySPDataRow, 2));
+        }
+        
+        // Collection Efficiency Section Header - Bold with light green background, merged A-C
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 3);
+        const ceHeader = worksheet.getCell(rowIndex, 1);
+        ceHeader.value = 'Collection Efficiency';
+        ceHeader.font = { bold: true, size: 12 };
+        ceHeader.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' } // Light green
+        };
+        ceHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        ceHeader.border = borderStyle;
+        rowIndex += 2;
+        
+        // Empty row with borders (rowIndex - 1)
+        const emptyCERow = rowIndex - 1;
+        applyBorders(worksheet.getCell(emptyCERow, 1));
+        applyBorders(worksheet.getCell(emptyCERow, 2));
+        applyBorders(worksheet.getCell(emptyCERow, 3));
+        
+        // Collection Efficiency Metrics
+        if (data.collection_efficiency) {
+            const ce = data.collection_efficiency;
+            const efficiency = ce.current_month_efficiency || 0;
+            const benchmark = ce.benchmark_efficiency || 0;
+            
+            const effLabelCell = getCell(rowIndex, 1);
+            effLabelCell.value = 'Collection Efficiency (Current Month):';
+            effLabelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+            effLabelCell.font = { bold: false };
+            
+            const efficiencyCell = getCell(rowIndex, 2);
+            efficiencyCell.value = efficiency.toFixed(0) + '%'; // Show as integer like in screenshot
+            efficiencyCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            efficiencyCell.font = { bold: false };
+            // Red if below benchmark
+            efficiencyCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: efficiency < benchmark ? 'FFFFCDD2' : 'FFC8E6C9' }
+            };
+            rowIndex++;
+            
+            const benchLabelCell = getCell(rowIndex, 1);
+            benchLabelCell.value = 'Benchmark Collection Efficiency (till 25th of month):';
+            benchLabelCell.alignment = { horizontal: 'left', vertical: 'middle' };
+            benchLabelCell.font = { bold: false };
+            
+            const benchmarkCell = getCell(rowIndex, 2);
+            benchmarkCell.value = benchmark.toFixed(0) + '%';
+            benchmarkCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            benchmarkCell.font = { bold: false };
+            rowIndex += 2;
+            
+            // Empty row with borders (rowIndex - 1)
+            const emptyCEDataRow = rowIndex - 1;
+            applyBorders(worksheet.getCell(emptyCEDataRow, 1));
+            applyBorders(worksheet.getCell(emptyCEDataRow, 2));
+        }
+        
+        // Historical Collection Efficiency Section Header - Bold with light green background, merged A-C
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 3);
+        const histHeader = worksheet.getCell(rowIndex, 1);
+        histHeader.value = 'Historical Collection Efficiency';
+        histHeader.font = { bold: true, size: 12 };
+        histHeader.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' } // Light green
+        };
+        histHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        histHeader.border = borderStyle;
+        rowIndex += 2;
+        
+        // Empty row with borders (rowIndex - 1)
+        const emptyHistRow = rowIndex - 1;
+        applyBorders(worksheet.getCell(emptyHistRow, 1));
+        applyBorders(worksheet.getCell(emptyHistRow, 2));
+        applyBorders(worksheet.getCell(emptyHistRow, 3));
+        
+        // Historical Collection Efficiency Table Headers - Bold with light green background
+        const headerFill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' }
+        };
+        
+        const monthHeader = getCell(rowIndex, 1);
+        monthHeader.value = 'Month';
+        monthHeader.font = { bold: true };
+        monthHeader.fill = headerFill;
+        monthHeader.alignment = { horizontal: 'left', vertical: 'middle' };
+        
+        const actualHeader = getCell(rowIndex, 2);
+        actualHeader.value = 'Actual';
+        actualHeader.font = { bold: true };
+        actualHeader.fill = headerFill;
+        actualHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        
+        const benchmarkHeader = getCell(rowIndex, 3);
+        benchmarkHeader.value = 'Benchmark';
+        benchmarkHeader.font = { bold: true };
+        benchmarkHeader.fill = headerFill;
+        benchmarkHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+        rowIndex++;
+        
+        // Historical Collection Efficiency Data
+        if (data.historical_collection_efficiency && Array.isArray(data.historical_collection_efficiency)) {
+            data.historical_collection_efficiency.forEach(item => {
+                const actual = item.actual || 0;
+                const benchmark = item.benchmark || 0;
+                
+                const monthCell = getCell(rowIndex, 1);
+                monthCell.value = item.month || '--';
+                monthCell.alignment = { horizontal: 'left', vertical: 'middle' };
+                monthCell.font = { bold: false };
+                
+                const actualCell = getCell(rowIndex, 2);
+                actualCell.value = actual.toFixed(0) + '%'; // Show as integer like in screenshot
+                actualCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                actualCell.font = { bold: false };
+                
+                // Green if actual >= benchmark, yellow if 80-100%, red if below 80%
+                let bgColor = 'FFC8E6C9'; // Green
+                if (actual < benchmark * 0.8) {
+                    bgColor = 'FFFFCDD2'; // Red
+                } else if (actual < benchmark) {
+                    bgColor = 'FFFFF9C4'; // Yellow
+                }
+                
+                actualCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: bgColor }
+                };
+                
+                const benchmarkCell = getCell(rowIndex, 3);
+                benchmarkCell.value = benchmark.toFixed(0) + '%';
+                benchmarkCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                benchmarkCell.font = { bold: false };
+                
+                rowIndex++;
+            });
+        }
+        
+        // Merge columns B and C for rows 2 to 23 and center align values
+        for (let row = 2; row <= 23; row++) {
+            try {
+                worksheet.mergeCells(row, 2, row, 3);
+                // Apply borders and center alignment to merged cell
+                const mergedCell = worksheet.getCell(row, 2);
+                mergedCell.border = borderStyle;
+                // Ensure center alignment for merged cells
+                if (mergedCell.value !== null && mergedCell.value !== undefined && mergedCell.value !== '') {
+                    mergedCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+            } catch (e) {
+                // If merge fails (cell already merged), skip
+                console.log(`Row ${row} merge skipped:`, e.message);
+            }
+        }
+        
+        // Set column widths
+        worksheet.getColumn(1).width = 45;
+        worksheet.getColumn(2).width = 30;
+        worksheet.getColumn(3).width = 15;
+        
+        // Set row heights for better appearance
+        worksheet.getRow(1).height = 25;
+        
+        // Generate filename with current date
+        const filename = `Performance_Report_BlinkR_Loan_${today.toISOString().split('T')[0]}.xlsx`;
+        
+        // Write file
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('Performance Report exported successfully');
+        
+    } catch (error) {
+        console.error('Error exporting performance report:', error);
+        alert('Failed to export performance report. Please try again.');
+    }
+}
+
+// Helper function to format currency for Excel (with ₹ symbol and commas)
+function formatCurrencyForExcel(amount) {
+    if (!amount && amount !== 0) return '0';
+    const numStr = amount.toString().replace(/,/g, '');
+    const num = parseFloat(numStr);
+    return formatNumberWithCommas(num);
+}
+
+// Function to save monthly target
+async function saveMonthlyTarget() {
+    try {
+        const input = document.getElementById('monthlyTargetInput');
+        const saveBtn = document.getElementById('saveMonthlyTargetBtn');
+        
+        if (!input) return;
+        
+        const value = removeCommas(input.value.trim());
+        
+        if (!value || isNaN(value) || parseFloat(value) <= 0) {
+            alert('Please enter a valid target amount');
+            return;
+        }
+        
+        // Disable button during save
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+        }
+        
+        // Send POST request to save monthly target
+        const response = await fetch('/api/daily-performance-metrics/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                monthly_target: value
+            })
+        });
+        
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+        
+        if (!response.ok) {
+            throw new Error(result.message || result.error || `Failed to save: ${response.status}`);
+        }
+        
+        if (result.success) {
+            // Reload the data to reflect the updated target
+            await loadDailyPerformanceData();
+            
+            // Show success feedback
+            if (saveBtn) {
+                saveBtn.textContent = 'Saved!';
+                saveBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                saveBtn.classList.add('bg-green-600');
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save';
+                    saveBtn.classList.remove('bg-green-600');
+                    saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }, 2000);
+            }
+        } else {
+            throw new Error(result.message || 'Failed to save monthly target');
+        }
+        
+    } catch (error) {
+        console.error('Error saving monthly target:', error);
+        const errorMessage = error.message || 'Failed to save monthly target. Please try again.';
+        alert(errorMessage);
+    } finally {
+        const saveBtn = document.getElementById('saveMonthlyTargetBtn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            if (saveBtn.textContent === 'Saving...') {
+                saveBtn.textContent = 'Save';
+            }
+        }
+    }
+}
+
 function formatNumber(number) {
     if (number === null || number === undefined || isNaN(number)) {
         return '0';
@@ -3234,8 +3865,9 @@ function setupAutoRefresh() {
                 console.log('Collection with Fraud tab data refreshed successfully');
                 
             } else if (activeTab === 'dailyPerformance') {
-                // Daily Performance tab - static UI only (no refresh needed)
-                console.log('Daily Performance tab - static UI, no refresh');
+                // Refresh Daily Performance tab (silent refresh - no loading screen)
+                await loadDailyPerformanceData(true);
+                console.log('Daily Performance tab data refreshed successfully');
                 
             } else if (activeTab === 'loanCount') {
                 // Refresh Loan Count Wise tab
@@ -4057,11 +4689,11 @@ async function loadLoanCountData() {
 
         // Load not closed percent table
         await loadNotClosedPercentTable(startDate, endDate);
-
+        
         // Show tables
         console.log('Showing tables...');
         showLoanCountTables();
-
+        
         console.log('=== LOAN COUNT DATA LOADING COMPLETE ===');
         
     } catch (error) {
@@ -5044,7 +5676,8 @@ function switchTab(tabName) {
     
     // Initialize daily performance tab if it's being switched to
     if (tabName === 'dailyPerformance') {
-        console.log('Switching to daily performance tab - static UI only');
+        console.log('Switching to daily performance tab - loading data...');
+        loadDailyPerformanceData();
     }
 
     // Initialize credit person tab if it's being switched to
@@ -6566,30 +7199,37 @@ document.addEventListener('DOMContentLoaded', function() {
         </div> <!-- End Loan Count Wise Tab -->
 
         <!-- Daily Performance Metrics Tab -->
-        <div id="dailyPerformanceContent" class="tab-content hidden"><!-- Coming Soon Banner -->
-        <div class="mb-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
-                <div class="flex items-center justify-center gap-3 mb-2">
-                    <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <h3 class="text-3xl font-bold text-yellow-400">COMING SOON</h3>
+        <div id="dailyPerformanceContent" class="tab-content hidden" style="margin-left: 3.5rem; margin-right: 3.5rem; margin-top: 2rem; margin-bottom: 2rem;">
+            <!-- Loading State -->
+            <div id="dailyPerformanceLoading" class="hidden">
+                <div class="card p-12">
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                        <p class="text-gray-400">Loading daily performance data...</p>
                 </div>
-                <p class="text-gray-300 text-lg">This feature is under development and will be available shortly</p>
+                </div>
             </div>
 
+            <!-- Main Content -->
+            <div id="dailyPerformanceMainContent">
             <!-- Performance Report Header -->
             <div class="mb-6">
                 <div class="flex items-center justify-between mb-2">
                     <h1 class="text-2xl font-bold text-white">Performance Report - BlinkR Loan</h1>
-                    <div class="flex items-center gap-2">
-                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    <div class="flex items-center gap-3">
+                        <button 
+                            onclick="exportPerformanceReport()"
+                            class="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                            title="Export to Excel"
+                        >
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
-                        <span class="text-white font-semibold">17</span>
+                            Export to Excel
+                        </button>
                     </div>
                 </div>
                 <div class="flex gap-6 text-sm text-gray-300">
-                    <div>Report Date: <span id="reportDate" class="text-white font-medium">--</span></div>
                     <div>Position as on: <span id="positionDate" class="text-white font-medium">--</span></div>
                 </div>
             </div>
@@ -6607,7 +7247,24 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="space-y-4">
                             <div class="flex justify-between items-center py-2 border-b border-gray-700">
                                 <span class="text-gray-300">Target of Sanction for the current Month:</span>
-                                <span class="text-white font-semibold">₹ <span id="monthlyTarget">--</span></span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-white font-semibold">₹</span>
+                                    <input 
+                                        type="text" 
+                                        id="monthlyTargetInput" 
+                                        class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-white font-semibold text-right w-40 focus:outline-none focus:border-blue-500"
+                                        placeholder="12,00,00,000"
+                                        value=""
+                                    />
+                                    <button 
+                                        id="saveMonthlyTargetBtn"
+                                        onclick="saveMonthlyTarget()"
+                                        class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                                        title="Save monthly target"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
                             </div>
                             <div class="flex justify-between items-center py-2 border-b border-gray-700">
                                 <span class="text-gray-300">Today's Disbursement:</span>
@@ -6699,6 +7356,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             </div>
+            </div> <!-- End Main Content -->
         </div> <!-- End Daily Performance Metrics Tab -->
 
         <!-- Credit Person Wise Tab -->
@@ -6977,6 +7635,13 @@ window.clearSavedTab = function() {
     localStorage.removeItem('activeTab');
     console.log('Saved tab cleared. Refresh the page to see the default tab.');
 };
+
+// ===============================
+// DISBURSAL TAB FUNCTIONALITY
+// ===============================
+
+// Disbursal tab is ready for fresh implementation
+
 // ===============================
 // DISBURSAL TAB FUNCTIONALITY
 // ===============================
