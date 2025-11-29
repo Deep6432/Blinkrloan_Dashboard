@@ -465,7 +465,6 @@ if (window.history.replaceState) {
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-gray-600">
-                                    <th class="text-left py-3 px-4 text-gray-300 font-semibold">ID</th>
                                     <th class="text-left py-3 px-4 text-gray-300 font-semibold">Full Name</th>
                                     <th class="text-left py-3 px-4 text-gray-300 font-semibold">PAN</th>
                                     <th class="text-left py-3 px-4 text-gray-300 font-semibold">City</th>
@@ -474,12 +473,12 @@ if (window.history.replaceState) {
                                     <th class="text-right py-3 px-4 text-gray-300 font-semibold">Disbursal Amount</th>
                                     <th class="text-right py-3 px-4 text-gray-300 font-semibold">Repayment Amount</th>
                                     <th class="text-left py-3 px-4 text-gray-300 font-semibold">Disbursal Date</th>
-                                    <th class="text-left py-3 px-4 text-gray-300 font-semibold">Status</th>
+                                    <th class="text-left py-3 px-4 text-gray-300 font-semibold">Repayment Date</th>
                                 </tr>
                             </thead>
                             <tbody id="disbursalTableBody">
                                 <tr>
-                                    <td colspan="10" class="py-8 text-center text-gray-400">Select date range and click Apply to load data</td>
+                                    <td colspan="9" class="py-8 text-center text-gray-400">Select date range and click Apply to load data</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -6306,7 +6305,7 @@ function updateDisbursalTable(records, pagination) {
     tbody.innerHTML = '';
     
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-400">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-400">No data available</td></tr>';
         document.getElementById('disbursalRecordCount').textContent = '0';
         document.getElementById('disbursalPagination').classList.add('hidden');
         return;
@@ -6355,12 +6354,13 @@ function updateDisbursalTable(records, pagination) {
             year: 'numeric' 
         }) : '--';
         
-        const status = record.is_lead_closed ? 
-            '<span class="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs">Closed</span>' :
-            '<span class="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded text-xs">Open</span>';
+        const repaymentDate = record.repayment_date ? new Date(record.repayment_date).toLocaleDateString('en-IN', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+        }) : '--';
         
         row.innerHTML = `
-            <td class="py-3 px-4 text-gray-300">${record.id || '--'}</td>
             <td class="py-3 px-4 text-white font-medium">${record.full_name || '--'}</td>
             <td class="py-3 px-4 text-gray-300">${record.pan || '--'}</td>
             <td class="py-3 px-4 text-gray-300">${record.city || '--'}</td>
@@ -6369,7 +6369,7 @@ function updateDisbursalTable(records, pagination) {
             <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(record.Disbursal_Amt || 0)}</td>
             <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(record.repayment_amount || 0)}</td>
             <td class="py-3 px-4 text-gray-300">${disbursalDate}</td>
-            <td class="py-3 px-4">${status}</td>
+            <td class="py-3 px-4 text-gray-300">${repaymentDate}</td>
         `;
         tbody.appendChild(row);
     });
