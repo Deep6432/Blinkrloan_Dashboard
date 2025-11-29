@@ -35,4 +35,6 @@ urlpatterns = [
     path('api/not-closed-percent/', views.api_not_closed_percent, name='api_not_closed_percent'),
     # Daily Performance Metrics API endpoint
     path('api/daily-performance-metrics/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
+    # Disbursal Summary API endpoint
+    path('api/disbursal-summary/', views.api_disbursal_summary, name='api_disbursal_summary'),
 ]
