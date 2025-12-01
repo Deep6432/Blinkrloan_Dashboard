@@ -2727,12 +2727,21 @@ def api_daily_performance_metrics(request):
         }
         
         # 2. COLLECTION EFFICIENCY
-        # Current month (December) collection efficiency - use ALL records from collection with fraud API
-        # Collection efficiency is calculated from all records, not just those disbursed in current month
+        # Current month collection efficiency - filter by repayment_date in current month (till today's date)
+        # Formula: (Total Collected / Total Repayment) × 100
+        # Only include loans whose repayment_date is in the current month up to today
         total_repayment_amount = Decimal('0')
         total_collected_amount = Decimal('0')
         
+        # Filter records for current month: loans whose repayment_date is in current month (up to today)
+        current_month_collection_records = []
         for record in filtered_records:
+            repayment_date = parse_datetime_safely(record.get('repayment_date'))
+            if repayment_date and month_start <= repayment_date <= today:
+                current_month_collection_records.append(record)
+        
+        # Calculate collection efficiency for current month (till date)
+        for record in current_month_collection_records:
             total_repayment_amount += safe_decimal_conversion(record.get('repayment_amount', 0))
             total_collected_amount += safe_decimal_conversion(record.get('total_received', 0))
         
@@ -2748,7 +2757,8 @@ def api_daily_performance_metrics(request):
         
         # 3. HISTORICAL COLLECTION EFFICIENCY
         # Calculate for June to November (6 months) from collection with fraud API data
-        # For each month, calculate efficiency for loans disbursed IN that specific month (not cumulative)
+        # For each month, calculate efficiency for loans whose repayment_date was IN that specific month
+        # Formula: (Total Collected in that month / Total Repayment Amount in that month) × 100
         historical_data = []
         
         # Define the months to show: June (6) to November (11) of current year
@@ -2761,14 +2771,16 @@ def api_daily_performance_metrics(request):
             hist_days_in_month = calendar.monthrange(hist_year, hist_month)[1]
             hist_month_end = date(hist_year, hist_month, hist_days_in_month)
             
-            # Filter records for historical month: loans disbursed IN this specific month only
+            # Filter records for historical month: loans whose repayment_date was IN this specific month
             hist_records = []
             for record in filtered_records:
-                disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-                if disbursal_date and hist_month_start <= disbursal_date <= hist_month_end:
+                repayment_date = parse_datetime_safely(record.get('repayment_date'))
+                if repayment_date and hist_month_start <= repayment_date <= hist_month_end:
                     hist_records.append(record)
             
             # Calculate collection efficiency for historical month
+            # Sum of total_received (amount collected) for that month
+            # Sum of repayment_amount (repayment amount) for that month
             hist_repayment = Decimal('0')
             hist_collected = Decimal('0')
             
