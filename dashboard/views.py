@@ -2727,11 +2727,12 @@ def api_daily_performance_metrics(request):
         }
         
         # 2. COLLECTION EFFICIENCY
-        # Current month collection efficiency
+        # Current month (December) collection efficiency - use ALL records from collection with fraud API
+        # Collection efficiency is calculated from all records, not just those disbursed in current month
         total_repayment_amount = Decimal('0')
         total_collected_amount = Decimal('0')
         
-        for record in current_month_records:
+        for record in filtered_records:
             total_repayment_amount += safe_decimal_conversion(record.get('repayment_amount', 0))
             total_collected_amount += safe_decimal_conversion(record.get('total_received', 0))
         
@@ -2746,27 +2747,25 @@ def api_daily_performance_metrics(request):
         }
         
         # 3. HISTORICAL COLLECTION EFFICIENCY
-        # Calculate for last 4 months
+        # Calculate for June to November (6 months) from collection with fraud API data
+        # For each month, calculate efficiency for loans disbursed up to and including that month
         historical_data = []
         
-        for i in range(4):
-            # Calculate month and year for historical data
-            if current_month - i > 0:
-                hist_month = current_month - i
-                hist_year = current_year
-            else:
-                hist_month = 12 + (current_month - i)
-                hist_year = current_year - 1
+        # Define the months to show: June (6) to November (11) of current year
+        months_to_show = [6, 7, 8, 9, 10, 11]  # June to November
+        
+        for hist_month in months_to_show:
+            hist_year = current_year
             
             hist_month_start = date(hist_year, hist_month, 1)
             hist_days_in_month = calendar.monthrange(hist_year, hist_month)[1]
             hist_month_end = date(hist_year, hist_month, hist_days_in_month)
             
-            # Filter records for historical month
+            # Filter records for historical month: loans disbursed up to and including this month
             hist_records = []
             for record in filtered_records:
                 disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-                if disbursal_date and hist_month_start <= disbursal_date <= hist_month_end:
+                if disbursal_date and disbursal_date <= hist_month_end:
                     hist_records.append(record)
             
             # Calculate collection efficiency for historical month
@@ -2779,7 +2778,7 @@ def api_daily_performance_metrics(request):
             
             hist_efficiency = float((hist_collected / hist_repayment) * 100) if hist_repayment > 0 else 0
             
-            # Set benchmark based on month (example logic)
+            # Set benchmark
             hist_benchmark = 85
             
             month_name = calendar.month_name[hist_month]
@@ -2788,9 +2787,6 @@ def api_daily_performance_metrics(request):
                 'actual': round(hist_efficiency, 2),
                 'benchmark': hist_benchmark
             })
-        
-        # Reverse to show most recent first
-        historical_data.reverse()
         
         return JsonResponse({
             'sanction_performance': sanction_performance,
