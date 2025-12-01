@@ -2365,3 +2365,250 @@ def api_loan_count_wise(request):
             'count_wise': [],
             'amount_wise': []
         }, status=500)
+
+
+@require_http_methods(["GET"])
+@no_cache_api
+def api_disbursal_summary(request):
+    """
+    API endpoint to fetch disbursal summary data from external API
+    Accepts startDate, endDate, state, city, reloan, and tenure query parameters
+    """
+    try:
+        start_date = request.GET.get('startDate')
+        end_date = request.GET.get('endDate')
+        
+        if not start_date or not end_date:
+            return JsonResponse({'error': 'startDate and endDate are required'}, status=400)
+        
+        # Validate date format
+        try:
+            datetime.strptime(start_date, '%Y-%m-%d')
+            datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+        
+        # Fetch data from external disbursal API
+        disbursal_api_url = 'https://backend.blinkrloan.com/insights/v1/disbursal'
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        
+        response = requests.get(disbursal_api_url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract result array from response
+        disbursal_records = data.get('result', [])
+        
+        # Parse date range for filtering
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Filter records by disbursal_date to ensure date range is correct
+        date_filtered_records = []
+        for record in disbursal_records:
+            disbursal_date_str = record.get('disbursal_date')
+            if disbursal_date_str:
+                parsed_date = parse_datetime_safely(disbursal_date_str)
+                if parsed_date:
+                    record_date = parsed_date
+                    if isinstance(record_date, date) and start_date_obj <= record_date <= end_date_obj:
+                        date_filtered_records.append(record)
+        
+        disbursal_records = date_filtered_records
+        
+        logger.info(f"Disbursal API returned {len(data.get('result', []))} records, after date filtering: {len(disbursal_records)} records for date range {start_date} to {end_date}")
+        
+        # Get unique states and cities from ALL records (for dropdown options)
+        unique_states = sorted(set(r.get('state') for r in disbursal_records if r.get('state')))
+        unique_cities_all = sorted(set(r.get('city') for r in disbursal_records if r.get('city')))
+        
+        # Apply filters
+        state_filter = request.GET.get('state')
+        city_filter = request.GET.get('city')
+        reloan_filter = request.GET.get('reloan')
+        tenure_filter = request.GET.get('tenure')
+        
+        filtered_records = disbursal_records.copy()
+        
+        # Filter by state
+        if state_filter:
+            filtered_records = [r for r in filtered_records if r.get('state') == state_filter]
+            unique_cities_all = sorted(set(r.get('city') for r in filtered_records if r.get('city')))
+        
+        # Filter by city
+        if city_filter:
+            filtered_records = [r for r in filtered_records if r.get('city', '').strip() == city_filter.strip()]
+        
+        # Filter by reloan status
+        if reloan_filter:
+            if reloan_filter.lower() == 'true':
+                filtered_records = [r for r in filtered_records if r.get('is_reloan_case', False) == True]
+            elif reloan_filter.lower() == 'false':
+                filtered_records = [r for r in filtered_records if r.get('is_reloan_case', False) == False]
+        
+        # Filter by tenure
+        if tenure_filter:
+            try:
+                if '-' in tenure_filter:
+                    min_tenure, max_tenure = map(int, tenure_filter.split('-'))
+                    filtered_records = [r for r in filtered_records if min_tenure <= r.get('tenure', 0) <= max_tenure]
+                else:
+                    tenure_value = int(tenure_filter)
+                    filtered_records = [r for r in filtered_records if r.get('tenure', 0) == tenure_value]
+            except (ValueError, AttributeError):
+                pass
+        
+        # Calculate summary statistics
+        total_records = len(filtered_records)
+        total_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in filtered_records)
+        total_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in filtered_records)
+        total_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in filtered_records)
+        total_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in filtered_records)
+        total_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in filtered_records)
+        
+        # Count by status
+        closed_count = sum(1 for r in filtered_records if r.get('is_lead_closed', False))
+        open_count = total_records - closed_count
+        reloan_count = sum(1 for r in filtered_records if r.get('is_reloan_case', False))
+        fresh_count = total_records - reloan_count
+        
+        # Calculate Fresh and Reloan breakdowns
+        fresh_records = [r for r in filtered_records if not r.get('is_reloan_case', False)]
+        reloan_records = [r for r in filtered_records if r.get('is_reloan_case', False)]
+        
+        fresh_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in fresh_records)
+        fresh_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in fresh_records)
+        fresh_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in fresh_records)
+        fresh_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in fresh_records)
+        fresh_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in fresh_records)
+        
+        reloan_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in reloan_records)
+        reloan_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in reloan_records)
+        reloan_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in reloan_records)
+        reloan_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in reloan_records)
+        reloan_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in reloan_records)
+        
+        # Aggregate data by state for pie chart
+        state_aggregated = {}
+        for record in filtered_records:
+            state = record.get('state', 'Unknown')
+            if state not in state_aggregated:
+                state_aggregated[state] = {
+                    'count': 0,
+                    'loan_amount': Decimal('0'),
+                    'disbursal_amount': Decimal('0')
+                }
+            state_aggregated[state]['count'] += 1
+            state_aggregated[state]['loan_amount'] += safe_decimal_conversion(record.get('loan_amount', 0))
+            state_aggregated[state]['disbursal_amount'] += safe_decimal_conversion(record.get('Disbursal_Amt', 0))
+        
+        state_chart_data = []
+        for state, data in sorted(state_aggregated.items(), key=lambda x: x[1]['loan_amount'], reverse=True):
+            state_chart_data.append({
+                'state': state,
+                'count': data['count'],
+                'loan_amount': float(data['loan_amount']),
+                'disbursal_amount': float(data['disbursal_amount'])
+            })
+        
+        # Aggregate data by city for pie chart
+        city_aggregated = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            record_state = record.get('state', 'Unknown')
+            
+            if state_filter and record_state != state_filter:
+                continue
+                
+            if city not in city_aggregated:
+                city_aggregated[city] = {
+                    'count': 0,
+                    'loan_amount': Decimal('0'),
+                    'disbursal_amount': Decimal('0'),
+                    'state': record_state
+                }
+            city_aggregated[city]['count'] += 1
+            city_aggregated[city]['loan_amount'] += safe_decimal_conversion(record.get('loan_amount', 0))
+            city_aggregated[city]['disbursal_amount'] += safe_decimal_conversion(record.get('Disbursal_Amt', 0))
+        
+        city_chart_data = []
+        sorted_cities = sorted(city_aggregated.items(), key=lambda x: x[1]['loan_amount'], reverse=True)[:15]
+        for city, data in sorted_cities:
+            city_chart_data.append({
+                'city': city,
+                'state': data['state'],
+                'count': data['count'],
+                'loan_amount': float(data['loan_amount']),
+                'disbursal_amount': float(data['disbursal_amount'])
+            })
+        
+        # Pagination
+        try:
+            page = int(request.GET.get('page', 1))
+            if page < 1:
+                page = 1
+        except (ValueError, TypeError):
+            page = 1
+        
+        per_page = 10
+        total_pages = (total_records + per_page - 1) // per_page if total_records > 0 else 1
+        if page > total_pages and total_pages > 0:
+            page = total_pages
+        
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_records = filtered_records[start_idx:end_idx]
+        
+        return JsonResponse({
+            'records': paginated_records,
+            'summary': {
+                'total_records': total_records,
+                'total_loan_amount': float(total_loan_amount),
+                'total_disbursal_amount': float(total_disbursal_amount),
+                'total_repayment_amount': float(total_repayment_amount),
+                'total_processing_fee': float(total_processing_fee),
+                'total_interest_amount': float(total_interest_amount),
+                'closed_count': closed_count,
+                'open_count': open_count,
+                'reloan_count': reloan_count,
+                'fresh_count': fresh_count,
+                'fresh_loan_amount': float(fresh_loan_amount),
+                'fresh_disbursal_amount': float(fresh_disbursal_amount),
+                'fresh_repayment_amount': float(fresh_repayment_amount),
+                'fresh_processing_fee': float(fresh_processing_fee),
+                'fresh_interest_amount': float(fresh_interest_amount),
+                'reloan_loan_amount': float(reloan_loan_amount),
+                'reloan_disbursal_amount': float(reloan_disbursal_amount),
+                'reloan_repayment_amount': float(reloan_repayment_amount),
+                'reloan_processing_fee': float(reloan_processing_fee),
+                'reloan_interest_amount': float(reloan_interest_amount)
+            },
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_records': total_records,
+                'per_page': per_page,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+            },
+            'filters': {
+                'unique_states': unique_states,
+                'unique_cities': unique_cities_all
+            },
+            'chart_data': {
+                'state': state_chart_data,
+                'city': city_chart_data
+            },
+            'start_date': start_date,
+            'end_date': end_date
+        })
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching disbursal data from external API: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to fetch data from external API'}, status=500)
+    except Exception as e:
+        logger.error(f"Error processing disbursal summary: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to process data'}, status=500)
