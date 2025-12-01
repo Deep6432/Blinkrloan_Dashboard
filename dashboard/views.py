@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import never_cache
 from django.db.models import Sum, Count, Avg, Q
 from django.db.models.functions import TruncDate
 from django.core.paginator import Paginator
@@ -19,8 +20,32 @@ logger = logging.getLogger(__name__)
 import json
 import requests
 
-from .models import LoanRecord
+from .models import LoanRecord, MonthlyTarget
 from .services import DataSyncService
+
+CREDIT_PERSON_API_URL = getattr(
+    settings,
+    'CREDIT_PERSON_API_URL',
+    'https://backend.blinkrloan.com/insights/v1/assigne-lead-wise-data'
+)
+
+NOT_CLOSED_PERCENT_API_URL = getattr(
+    settings,
+    'NOT_CLOSED_PERCENT_API_URL',
+    'https://backend.blinkrloan.com/insights/v1/not-closed-percent-against-total'
+)
+
+
+# Decorator to add no-cache headers to API responses
+def no_cache_api(view_func):
+    """Decorator to prevent caching of API responses"""
+    def wrapped_view(request, *args, **kwargs):
+        response = view_func(request, *args, **kwargs)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+    return wrapped_view
 
 
 def parse_datetime_safely(datetime_str):
@@ -99,7 +124,14 @@ def calculate_kpi_from_records(records):
             'fresh_pending_amount': 0,
             'reloan_pending_amount': 0,
             'fresh_principal_outstanding': 0,
-            'reloan_principal_outstanding': 0
+            'reloan_principal_outstanding': 0,
+            # Add recovery calculation fields
+            'recoverable_amount_excl_90': 0,
+            'recovery_percentage_excl_90': 0,
+            'fresh_recoverable_excl_90': 0,
+            'fresh_recovery_percentage_excl_90': 0,
+            'reloan_recoverable_excl_90': 0,
+            'reloan_recovery_percentage_excl_90': 0
         }
     
     # Calculate totals with safe conversion
@@ -151,6 +183,36 @@ def calculate_kpi_from_records(records):
     collected_percentage = collection_rate  # Same as collection rate
     pending_percentage = round(100 - collection_rate, 2) if collection_rate > 0 else 0
     
+    # Calculate Principal Outstanding Excluding 90+ Days DPD (Recovery %)
+    # Filter records where overdue_days <= 90
+    records_excl_90_dpd = [r for r in records if int(r.get('overdue_days', 0)) <= 90]
+    
+    # Calculate for all records (excl 90+)
+    sanction_amount_excl_90 = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in records_excl_90_dpd)
+    amount_received_excl_90 = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in records_excl_90_dpd)
+    interest_amount_excl_90 = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in records_excl_90_dpd)
+    
+    recoverable_amount_excl_90 = amount_received_excl_90 - interest_amount_excl_90
+    recovery_percentage_excl_90 = float((recoverable_amount_excl_90 / sanction_amount_excl_90) * 100) if sanction_amount_excl_90 > 0 else 0
+    
+    # Calculate for Fresh loans (excl 90+)
+    fresh_records_excl_90 = [r for r in records_excl_90_dpd if r.get('reloan_status') != 'Reloan']
+    fresh_sanction_excl_90 = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in fresh_records_excl_90)
+    fresh_received_excl_90 = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in fresh_records_excl_90)
+    fresh_interest_excl_90 = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in fresh_records_excl_90)
+    
+    fresh_recoverable_excl_90 = fresh_received_excl_90 - fresh_interest_excl_90
+    fresh_recovery_percentage_excl_90 = float((fresh_recoverable_excl_90 / fresh_sanction_excl_90) * 100) if fresh_sanction_excl_90 > 0 else 0
+    
+    # Calculate for Reloan loans (excl 90+)
+    reloan_records_excl_90 = [r for r in records_excl_90_dpd if r.get('reloan_status') == 'Reloan']
+    reloan_sanction_excl_90 = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in reloan_records_excl_90)
+    reloan_received_excl_90 = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in reloan_records_excl_90)
+    reloan_interest_excl_90 = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in reloan_records_excl_90)
+    
+    reloan_recoverable_excl_90 = reloan_received_excl_90 - reloan_interest_excl_90
+    reloan_recovery_percentage_excl_90 = float((reloan_recoverable_excl_90 / reloan_sanction_excl_90) * 100) if reloan_sanction_excl_90 > 0 else 0
+    
     return {
         'total_applications': total_applications,
         'sanction_amount': float(sanction_amount),
@@ -177,7 +239,14 @@ def calculate_kpi_from_records(records):
         'fresh_pending_amount': float(fresh_pending_amount),
         'reloan_pending_amount': float(reloan_pending_amount),
         'fresh_principal_outstanding': float(fresh_principal_outstanding),
-        'reloan_principal_outstanding': float(reloan_principal_outstanding)
+        'reloan_principal_outstanding': float(reloan_principal_outstanding),
+        # Add recovery calculation fields
+        'recoverable_amount_excl_90': float(recoverable_amount_excl_90),
+        'recovery_percentage_excl_90': round(recovery_percentage_excl_90, 2),
+        'fresh_recoverable_excl_90': float(fresh_recoverable_excl_90),
+        'fresh_recovery_percentage_excl_90': round(fresh_recovery_percentage_excl_90, 2),
+        'reloan_recoverable_excl_90': float(reloan_recoverable_excl_90),
+        'reloan_recovery_percentage_excl_90': round(reloan_recovery_percentage_excl_90, 2)
     }
 
 def get_kpi_data(queryset):
@@ -263,9 +332,9 @@ def get_kpi_data(queryset):
     collected_amount = actual_repayment_amount
     pending_collection = repayment_amount - collected_amount
 
-    # Percentages
-    collected_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
-    pending_percentage = ((repayment_amount - collected_amount) / repayment_amount * 100) if repayment_amount > 0 else 0
+    # Percentages (rounded to 2 decimal places)
+    collected_percentage = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
+    pending_percentage = round(((repayment_amount - collected_amount) / repayment_amount * 100), 2) if repayment_amount > 0 else 0
 
     # Calculate fresh and reloan pending amounts
     fresh_pending_amount = (fresh_amounts['fresh_repayment'] or 0) - (fresh_amounts['fresh_collected'] or 0)
@@ -520,9 +589,9 @@ def calculate_kpis(queryset):
     collected_amount = actual_repayment_amount
     pending_collection = repayment_amount - collected_amount
     
-    # Percentages
-    collected_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
-    pending_percentage = ((repayment_amount - collected_amount) / repayment_amount * 100) if repayment_amount > 0 else 0
+    # Percentages (rounded to 2 decimal places)
+    collected_percentage = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
+    pending_percentage = round(((repayment_amount - collected_amount) / repayment_amount * 100), 2) if repayment_amount > 0 else 0
     
     return {
         'total_applications': total_applications,
@@ -541,116 +610,126 @@ def calculate_kpis(queryset):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_dpd_buckets(request):
-    """API endpoint for DPD bucket data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-    
-    # Store the selected DPD bucket for highlighting
-    selected_dpd = request.GET.get('dpd')
-    
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for DPD bucket data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-    
-    # Define normalized DPD bucket mapping
-    dpd_bucket_mapping = {
-        '0': '0 days DPD',
-        '0-30': 'DPD 1-30',
-        'DPD 1-30': 'DPD 1-30',
-        '31-60': 'DPD 31-60',
-        'DPD 31-60': 'DPD 31-60',
-        '61-90': 'DPD 61-90',
-        'DPD 61-90': 'DPD 61-90',
-        'DPD 91-120': 'DPD 91-120',
-        'No DPD': 'No DPD'
-    }
-    
-    # Get all unique DPD buckets and normalize them
-    all_dpd_buckets = LoanRecord.objects.values_list('dpd_bucket', flat=True).distinct()
-    normalized_buckets = set()
-    
-    for bucket in all_dpd_buckets:
-        normalized_bucket = dpd_bucket_mapping.get(bucket, bucket)
-        normalized_buckets.add(normalized_bucket)
-    
-    # Group by DPD bucket with additional aggregations
-    dpd_data = queryset.values('dpd_bucket').annotate(
-        count=Count('id'),
-        total_net_disbursal=Sum('net_disbursal'),
-        total_repayment_amount=Sum('repayment_amount')
-    ).order_by('dpd_bucket')
-    
-    # Create consolidated data by normalized bucket names
-    consolidated_data = {}
-    for item in dpd_data:
-        normalized_bucket = dpd_bucket_mapping.get(item['dpd_bucket'], item['dpd_bucket'])
-        if normalized_bucket not in consolidated_data:
-            consolidated_data[normalized_bucket] = {
-                'dpd_bucket': normalized_bucket,
-                'count': 0,
-                'total_net_disbursal': 0,
-                'total_repayment_amount': 0
-            }
+        # Extract the data array
+        records = data.get('pr', [])
         
-        consolidated_data[normalized_bucket]['count'] += item['count']
-        consolidated_data[normalized_bucket]['total_net_disbursal'] += float(item['total_net_disbursal'] or 0)
-        consolidated_data[normalized_bucket]['total_repayment_amount'] += float(item['total_repayment_amount'] or 0)
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Store the selected DPD bucket for highlighting
+        selected_dpd = request.GET.get('dpd')
     
-    # Create final result with proper ordering
-    bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'No DPD']
-    result = []
-    
-    for bucket in bucket_order:
-        if bucket in normalized_buckets:
-            bucket_data = consolidated_data.get(bucket, {
-                'dpd_bucket': bucket,
-                'count': 0,
-                'total_net_disbursal': 0,
-                'total_repayment_amount': 0
+        # Group by DPD bucket
+        bucket_data = {}
+        for record in filtered_records:
+            dpd_bucket = record.get('dpd_bucket', 'Unknown')
+            if dpd_bucket not in bucket_data:
+                bucket_data[dpd_bucket] = {
+                    'dpd_bucket': dpd_bucket,
+                    'count': 0,
+                    'total_disbursal': Decimal('0'),
+                    'total_due': Decimal('0')
+                }
+            
+            bucket_data[dpd_bucket]['count'] += 1
+            bucket_data[dpd_bucket]['total_disbursal'] += Decimal(str(record.get('net_disbursal', 0)))
+            bucket_data[dpd_bucket]['total_due'] += Decimal(str(record.get('repayment_amount', 0)))
+        
+        # Convert to list and format
+        result = []
+        for bucket_info in bucket_data.values():
+            dpd_bucket = bucket_info['dpd_bucket']
+            result.append({
+                'dpd_bucket': dpd_bucket,
+                'count': bucket_info['count'],
+                'total_disbursal': float(bucket_info['total_disbursal']),
+                'total_due': float(bucket_info['total_due']),
+                'is_selected': dpd_bucket == selected_dpd if selected_dpd else False
             })
-            bucket_data['is_selected'] = (bucket == selected_dpd)
-            result.append(bucket_data)
-    
-    return JsonResponse({
-        'data': result
-    })
+        
+        # Sort by bucket name
+        result.sort(key=lambda x: x['dpd_bucket'])
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_state_repayment(request):
-    """API endpoint for state-wise repayment data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    # Group by state
-    state_data = queryset.values('state').annotate(
-        repayment_amount=Sum('total_received')
-    ).order_by('-repayment_amount')
-    
-    return JsonResponse({
-        'data': list(state_data)
-    })
+    """API endpoint for state-wise repayment data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
+        
+        # Group by state and calculate aggregates
+        state_data = {}
+        for record in filtered_records:
+            state = record.get('state', 'Unknown')
+            if state not in state_data:
+                state_data[state] = {
+                    'repayment_amount': Decimal('0'),
+                    'collected_amount': Decimal('0')
+                }
+
+            repayment_amt = Decimal(str(record.get('repayment_amount', 0)))
+            collected_amt = Decimal(str(record.get('total_received', 0)))
+
+            state_data[state]['repayment_amount'] += repayment_amt
+            state_data[state]['collected_amount'] += collected_amt
+
+        # Convert to list and format
+        result = []
+        for state, values in state_data.items():
+            repayment_total = values['repayment_amount']
+            collected_total = values['collected_amount']
+            pending_total = repayment_total - collected_total
+            if pending_total < 0:
+                pending_total = Decimal('0')
+
+            result.append({
+                'state': state,
+                'repayment_amount': float(repayment_total),
+                'collected_amount': float(collected_total),
+                'pending_amount': float(pending_total)
+            })
+
+        # Sort by pending amount (highest first) for Pending Amount by State chart
+        result.sort(key=lambda x: x['pending_amount'], reverse=True)
+        
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_kpi_data(request):
     """API endpoint for KPI data - now uses Collection WITH Fraud API directly"""
     try:
@@ -666,9 +745,47 @@ def api_kpi_data(request):
         # Calculate KPIs from filtered records
         kpi_data = calculate_kpi_from_records(filtered_records)
 
-        # Extract filter options for dropdowns from FILTERED records (not original records)
+        # Calculate Principal Outstanding Excluding 90+ Days DPD (Recovery %)
+        # Filter records where overdue_days <= 90
+        records_excl_90_dpd = [r for r in filtered_records if int(r.get('overdue_days', 0)) <= 90]
+        
+        # Calculate for all records (excl 90+)
+        sanction_amount_excl_90 = sum(Decimal(str(r.get('loan_amount', 0))) for r in records_excl_90_dpd)
+        amount_received_excl_90 = sum(Decimal(str(r.get('total_received', 0))) for r in records_excl_90_dpd)
+        interest_amount_excl_90 = sum(Decimal(str(r.get('interest_amount', 0))) for r in records_excl_90_dpd)
+        
+        recoverable_amount_excl_90 = amount_received_excl_90 - interest_amount_excl_90
+        recovery_percentage_excl_90 = float((recoverable_amount_excl_90 / sanction_amount_excl_90) * 100) if sanction_amount_excl_90 > 0 else 0
+        
+        # Calculate for Fresh loans (excl 90+)
+        fresh_records_excl_90 = [r for r in records_excl_90_dpd if r.get('reloan_status') != 'Reloan']
+        fresh_sanction_excl_90 = sum(Decimal(str(r.get('loan_amount', 0))) for r in fresh_records_excl_90)
+        fresh_received_excl_90 = sum(Decimal(str(r.get('total_received', 0))) for r in fresh_records_excl_90)
+        fresh_interest_excl_90 = sum(Decimal(str(r.get('interest_amount', 0))) for r in fresh_records_excl_90)
+        
+        fresh_recoverable_excl_90 = fresh_received_excl_90 - fresh_interest_excl_90
+        fresh_recovery_percentage_excl_90 = float((fresh_recoverable_excl_90 / fresh_sanction_excl_90) * 100) if fresh_sanction_excl_90 > 0 else 0
+        
+        # Calculate for Reloan loans (excl 90+)
+        reloan_records_excl_90 = [r for r in records_excl_90_dpd if r.get('reloan_status') == 'Reloan']
+        reloan_sanction_excl_90 = sum(Decimal(str(r.get('loan_amount', 0))) for r in reloan_records_excl_90)
+        reloan_received_excl_90 = sum(Decimal(str(r.get('total_received', 0))) for r in reloan_records_excl_90)
+        reloan_interest_excl_90 = sum(Decimal(str(r.get('interest_amount', 0))) for r in reloan_records_excl_90)
+        
+        reloan_recoverable_excl_90 = reloan_received_excl_90 - reloan_interest_excl_90
+        reloan_recovery_percentage_excl_90 = float((reloan_recoverable_excl_90 / reloan_sanction_excl_90) * 100) if reloan_sanction_excl_90 > 0 else 0
+        
+        # Add to KPI data
+        kpi_data['recoverable_amount_excl_90'] = float(recoverable_amount_excl_90)
+        kpi_data['recovery_percentage_excl_90'] = round(recovery_percentage_excl_90, 2)
+        kpi_data['fresh_recoverable_excl_90'] = float(fresh_recoverable_excl_90)
+        kpi_data['fresh_recovery_percentage_excl_90'] = round(fresh_recovery_percentage_excl_90, 2)
+        kpi_data['reloan_recoverable_excl_90'] = float(reloan_recoverable_excl_90)
+        kpi_data['reloan_recovery_percentage_excl_90'] = round(reloan_recovery_percentage_excl_90, 2)
+
+        # Extract filter options for dropdowns from FILTERED records (use actual city names, not normalized)
         unique_states = sorted(list(set(record.get('state', '') for record in filtered_records if record.get('state'))))
-        unique_cities = sorted(list(set(record.get('city', '') for record in filtered_records if record.get('city'))))
+        unique_cities = sorted(list(set(record.get('city', '').strip() for record in filtered_records if record.get('city', '').strip())))
         all_closed_statuses = list(set(record.get('closed_status', '') for record in filtered_records if record.get('closed_status')))
         unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
         
@@ -692,193 +809,208 @@ def api_kpi_data(request):
         return JsonResponse({'error': 'Failed to fetch data'}, status=500)
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_city_collected(request):
-    """API endpoint for top 10 cities by collection percentage"""
-    queryset = LoanRecord.objects.all()
-
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for top 10 cities by collection percentage from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
 
     # Group by city and calculate collection metrics
-    city_data = queryset.values('city').annotate(
-        collected_amount=Sum('total_received'),
-        repayment_amount=Sum('repayment_amount'),
-        total_applications=Count('id')
-    )
-
-    # Group data by normalized city names
-    normalized_city_data = {}
-    for item in city_data:
-        normalized_city = normalize_city_name(item['city'])
-        
-        if normalized_city not in normalized_city_data:
-            normalized_city_data[normalized_city] = {
+        city_data = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            normalized_city = normalize_city_name(city)
+            
+            if normalized_city not in city_data:
+                city_data[normalized_city] = {
                 'city': normalized_city,
-                'collected_amount': 0,
-                'repayment_amount': 0,
+                    'collected_amount': Decimal('0'),
+                    'repayment_amount': Decimal('0'),
                 'total_applications': 0
             }
         
-        normalized_city_data[normalized_city]['collected_amount'] += item['collected_amount'] or 0
-        normalized_city_data[normalized_city]['repayment_amount'] += item['repayment_amount'] or 0
-        normalized_city_data[normalized_city]['total_applications'] += item['total_applications']
+            city_data[normalized_city]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+            city_data[normalized_city]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+            city_data[normalized_city]['total_applications'] += 1
+        
+        # Convert to list and calculate collection percentage
+        result = []
+        for city_info in city_data.values():
+            # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
+            if (city_info['total_applications'] >= 20 and 
+                city_info['repayment_amount'] > 0):
+                collection_percentage = float((city_info['collected_amount'] / city_info['repayment_amount']) * 100)
 
-    result = []
-    for city_info in normalized_city_data.values():
-        # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
-        if (city_info['total_applications'] >= 20 and 
-            city_info['repayment_amount'] and 
-            city_info['repayment_amount'] > 0):
-            collection_percentage = (city_info['collected_amount'] / city_info['repayment_amount']) * 100
+                result.append({
+                    'city': city_info['city'],
+                    'collected_amount': float(city_info['collected_amount']),
+                    'repayment_amount': float(city_info['repayment_amount']),
+                    'collection_percentage': collection_percentage,
+                    'total_applications': city_info['total_applications']
+                })
 
-            result.append({
-                'city': city_info['city'],
-                'collected_amount': float(city_info['collected_amount']),
-                'repayment_amount': float(city_info['repayment_amount']),
-                'collection_percentage': float(collection_percentage),
-                'total_applications': city_info['total_applications']
-            })
+        # Sort by collection percentage (highest first) and take top 10
+        result.sort(key=lambda x: x['collection_percentage'], reverse=True)
+        result = result[:10]
 
-    # Sort by collection percentage (highest first) and take top 10
-    result.sort(key=lambda x: x['collection_percentage'], reverse=True)
-    result = result[:10]
-
-    return JsonResponse({
-        'data': result
-    })
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_city_uncollected(request):
-    """API endpoint for top 10 cities by collection percentage (worst performers)"""
-    queryset = LoanRecord.objects.all()
-
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
+    """API endpoint for top 10 cities by collection percentage (worst performers) from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
         
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+        
+        if not filtered_records:
+            return JsonResponse({'data': []})
 
     # Group by city and calculate collection metrics
-    city_data = queryset.values('city').annotate(
-        collected_amount=Sum('total_received'),
-        repayment_amount=Sum('repayment_amount'),
-        total_applications=Count('id')
-    )
-
-    # Group data by normalized city names
-    normalized_city_data = {}
-    for item in city_data:
-        normalized_city = normalize_city_name(item['city'])
-        
-        if normalized_city not in normalized_city_data:
-            normalized_city_data[normalized_city] = {
+        city_data = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            normalized_city = normalize_city_name(city)
+            
+            if normalized_city not in city_data:
+                city_data[normalized_city] = {
                 'city': normalized_city,
-                'collected_amount': 0,
-                'repayment_amount': 0,
+                    'collected_amount': Decimal('0'),
+                    'repayment_amount': Decimal('0'),
                 'total_applications': 0
             }
         
-        normalized_city_data[normalized_city]['collected_amount'] += item['collected_amount'] or 0
-        normalized_city_data[normalized_city]['repayment_amount'] += item['repayment_amount'] or 0
-        normalized_city_data[normalized_city]['total_applications'] += item['total_applications']
+            city_data[normalized_city]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+            city_data[normalized_city]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+            city_data[normalized_city]['total_applications'] += 1
+        
+        # Convert to list and calculate collection percentage
+        result = []
+        for city_info in city_data.values():
+            # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
+            if (city_info['total_applications'] >= 20 and 
+                city_info['repayment_amount'] > 0):
+                collection_percentage = float((city_info['collected_amount'] / city_info['repayment_amount']) * 100)
+                uncollected_amount = float(city_info['repayment_amount'] - city_info['collected_amount'])
 
-    # Calculate collection percentage for all cities
-    result = []
-    for city_info in normalized_city_data.values():
-        # Only include cities with minimum 20 loans and repayment amounts > 0 to avoid division by zero
-        if (city_info['total_applications'] >= 20 and 
-            city_info['repayment_amount'] and 
-            city_info['repayment_amount'] > 0):
-            uncollected_amount = city_info['repayment_amount'] - city_info['collected_amount']
-            collection_percentage = (city_info['collected_amount'] / city_info['repayment_amount']) * 100
+                result.append({
+                    'city': city_info['city'],
+                    'collected_amount': float(city_info['collected_amount']),
+                    'repayment_amount': float(city_info['repayment_amount']),
+                    'uncollected_amount': uncollected_amount,
+                    'collection_percentage': collection_percentage,
+                    'total_applications': city_info['total_applications']
+                })
 
-            result.append({
-                'city': city_info['city'],
-                'collected_amount': float(city_info['collected_amount']),
-                'repayment_amount': float(city_info['repayment_amount']),
-                'uncollected_amount': float(uncollected_amount),
-                'collection_percentage': float(collection_percentage),
-                'total_applications': city_info['total_applications']
-            })
+        # Sort by collection percentage (lowest first - worst performers) and take top 10
+        result.sort(key=lambda x: x['collection_percentage'], reverse=False)
+        result = result[:10]
 
-    # Sort by collection percentage (lowest first - worst performers) and take top 10
-    result.sort(key=lambda x: x['collection_percentage'], reverse=False)
-    result = result[:10]
-
-    return JsonResponse({
-        'data': result
-    })
+        return JsonResponse({'data': result})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_time_series(request):
-    """API endpoint for time series data"""
-    queryset = LoanRecord.objects.all()
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
+    """API endpoint for time series data from Collection WITH Fraud API"""
+    try:
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records
+        filtered_records = apply_fraud_filters(records, request)
+
+        if not filtered_records:
+            return JsonResponse({'data': []})
     
     # Group by repayment date
-    time_data = queryset.values('repayment_date').annotate(
-        repayment_amount=Sum('repayment_amount'),
-        collected_amount=Sum('total_received')
-    ).order_by('repayment_date')
-    
-    # Calculate collection percentage
-    result = []
-    for item in time_data:
-        collection_percentage = 0
-        if item['repayment_amount'] and item['repayment_amount'] > 0:
-            collection_percentage = (item['collected_amount'] / item['repayment_amount']) * 100
+        date_data = {}
+        for record in filtered_records:
+            repayment_date_str = record.get('repayment_date')
+            if repayment_date_str:
+                try:
+                    # Parse datetime safely - handles both UTC and IST formats
+                    repayment_date = parse_datetime_safely(repayment_date_str)
+                    if repayment_date:
+                        date_key = repayment_date.strftime('%Y-%m-%d')
+                        
+                        if date_key not in date_data:
+                            date_data[date_key] = {
+                                'date': date_key,
+                                'repayment_amount': Decimal('0'),
+                                'collected_amount': Decimal('0'),
+                                'collected_cases': 0,
+                                'pending_cases': 0
+                            }
+                        
+                        date_data[date_key]['repayment_amount'] += Decimal(str(record.get('repayment_amount', 0)))
+                        date_data[date_key]['collected_amount'] += Decimal(str(record.get('total_received', 0)))
+                        
+                        # Count cases - a case is collected if total_received > 0, otherwise pending
+                        total_received = Decimal(str(record.get('total_received', 0)))
+                        if total_received > 0:
+                            date_data[date_key]['collected_cases'] += 1
+                        else:
+                            date_data[date_key]['pending_cases'] += 1
+                except:
+                    continue
         
-        result.append({
-            'date': item['repayment_date'].strftime('%Y-%m-%d') if item['repayment_date'] else '',
-            'repayment_amount': float(item['repayment_amount'] or 0),
-            'collected_amount': float(item['collected_amount'] or 0),
-            'collection_percentage': float(collection_percentage)
-        })
-    
-    return JsonResponse({
-        'data': result
-    })
+        # Convert to list and format
+        time_series_data = []
+        for date_info in date_data.values():
+            repayment_amount = float(date_info['repayment_amount'])
+            collected_amount = float(date_info['collected_amount'])
+            pending_amount = repayment_amount - collected_amount
+            collection_percentage = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
+            time_series_data.append({
+                'date': date_info['date'],
+                'repayment_amount': repayment_amount,
+                'collected_amount': collected_amount,
+                'pending_amount': pending_amount,
+                'collected_cases': date_info['collected_cases'],
+                'pending_cases': date_info['pending_cases'],
+                'collection_percentage': collection_percentage
+            })
+        
+        # Sort by date
+        time_series_data.sort(key=lambda x: x['date'])
+        
+        return JsonResponse({'data': time_series_data})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["POST"])
@@ -902,118 +1034,115 @@ def sync_data(request):
 
 
 @require_http_methods(["GET"])
+@no_cache_api
 def api_dpd_bucket_details(request):
-    """API endpoint for detailed DPD bucket data"""
-    from django.core.paginator import Paginator, EmptyPage
-    from django.db import models
-    
-    dpd_bucket = request.GET.get('dpd_bucket')
-    search = request.GET.get('search', '')
-    page = int(request.GET.get('page', 1))
-    per_page = int(request.GET.get('per_page', 20))
-    sort_by = request.GET.get('sort_by', 'overdue_days')
-    sort_order = request.GET.get('sort_order', 'desc')
-    
-    if not dpd_bucket:
-        return JsonResponse({'error': 'DPD bucket is required'}, status=400)
-    
-    # Start with all records
-    queryset = LoanRecord.objects.all()
-    
-    # Apply DPD bucket filter - handle normalized bucket names
-    dpd_bucket_mapping = {
-        '0 days DPD': ['0'],
-        'DPD 1-30': ['0-30', 'DPD 1-30'],
-        'DPD 31-60': ['31-60', 'DPD 31-60'],
-        'DPD 61-90': ['61-90', 'DPD 61-90'],
-        'DPD 91-120': ['DPD 91-120'],
-        'No DPD': ['No DPD']
-    }
-    
-    # Get the original bucket names for the normalized bucket
-    original_buckets = dpd_bucket_mapping.get(dpd_bucket, [dpd_bucket])
-    queryset = queryset.filter(dpd_bucket__in=original_buckets)
-    
-    # Apply date range filters based on date_type
-    queryset = apply_date_filter(queryset, request)
-    
-    # Apply other filters (same as main dashboard)
-    if request.GET.get('closing_status'):
-        queryset = queryset.filter(closed_status=request.GET.get('closing_status'))
-    
-    if request.GET.get('dpd'):
-        queryset = queryset.filter(dpd_bucket=request.GET.get('dpd'))
-    
-    # Apply hierarchical state and city filtering
-    state_filter = request.GET.get('state')
-    city_filter = request.GET.get('city')
-    
-    if state_filter:
-        queryset = queryset.filter(state=state_filter)
-        
-        if city_filter:
-            # If both state and city are selected, filter by both
-            queryset = queryset.filter(city=city_filter)
-    elif city_filter:
-        # If only city is selected, filter by city
-        queryset = queryset.filter(city=city_filter)
-    
-    # Apply search filter
-    if search:
-        queryset = queryset.filter(
-            models.Q(loan_no__icontains=search) | 
-            models.Q(pan__icontains=search)
-        )
-    
-    # Apply sorting
-    if sort_order == 'desc':
-        sort_by = f'-{sort_by}'
-    queryset = queryset.order_by(sort_by)
-    
-    # Calculate totals before pagination
-    totals = queryset.aggregate(
-        total_net_disbursal=Sum('net_disbursal'),
-        total_repayment_amount=Sum('repayment_amount')
-    )
-    
-    # Apply pagination
-    paginator = Paginator(queryset, per_page)
+    """API endpoint for detailed DPD bucket data from Collection WITH Fraud API"""
     try:
-        page_obj = paginator.page(page)
-    except EmptyPage:
-        page_obj = paginator.page(1)
-    
-    # Format the data
-    records = []
-    for record in page_obj:
-        records.append({
-            'loan_no': record.loan_no,
-            'pan': record.pan.upper() if record.pan else '',
-            'disbursal_date': record.disbursal_date.strftime('%d/%m/%Y') if record.disbursal_date else '—',
-            'net_disbursal': float(record.net_disbursal or 0),
-            'repayment_date': record.repayment_date.strftime('%d/%m/%Y') if record.repayment_date else '—',
-            'repayment_amount': float(record.repayment_amount or 0),
-            'overdue_days': record.overdue_days,
-            'dpd_bucket': record.dpd_bucket,
+        dpd_bucket = request.GET.get('dpd_bucket')
+        search = request.GET.get('search', '')
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 20))
+        sort_by = request.GET.get('sort_by', 'overdue_days')
+        sort_order = request.GET.get('sort_order', 'desc')
+        
+        if not dpd_bucket:
+            return JsonResponse({'error': 'DPD bucket is required'}, status=400)
+        
+        # Fetch data from the Collection WITH Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('pr', [])
+        
+        # Apply filters to the records (date range, state, city, closing status, etc.)
+        filtered_records = apply_fraud_filters(records, request)
+        
+        # Filter by DPD bucket
+        bucket_filtered_records = [r for r in filtered_records if r.get('dpd_bucket') == dpd_bucket]
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            bucket_filtered_records = [
+                r for r in bucket_filtered_records 
+                if (search_lower in str(r.get('loan_no', '')).lower() or 
+                    search_lower in str(r.get('pan', '')).lower())
+            ]
+        
+        # Calculate totals
+        total_net_disbursal = sum(Decimal(str(r.get('net_disbursal', 0))) for r in bucket_filtered_records)
+        total_repayment_amount = sum(Decimal(str(r.get('repayment_amount', 0))) for r in bucket_filtered_records)
+        
+        # Sort records
+        reverse = (sort_order == 'desc')
+        if sort_by == 'overdue_days':
+            bucket_filtered_records.sort(key=lambda x: int(x.get('overdue_days', 0)), reverse=reverse)
+        elif sort_by == 'net_disbursal':
+            bucket_filtered_records.sort(key=lambda x: float(x.get('net_disbursal', 0)), reverse=reverse)
+        elif sort_by == 'repayment_amount':
+            bucket_filtered_records.sort(key=lambda x: float(x.get('repayment_amount', 0)), reverse=reverse)
+        elif sort_by == 'loan_no':
+            bucket_filtered_records.sort(key=lambda x: str(x.get('loan_no', '')), reverse=reverse)
+        
+        # Calculate pagination
+        total_records = len(bucket_filtered_records)
+        total_pages = (total_records + per_page - 1) // per_page if total_records > 0 else 1
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        page_records = bucket_filtered_records[start_idx:end_idx]
+        
+        # Format the data
+        formatted_records = []
+        for record in page_records:
+            disbursal_date_str = record.get('disbursal_date')
+            repayment_date_str = record.get('repayment_date')
+            
+            # Parse and format dates
+            disbursal_date_formatted = '—'
+            if disbursal_date_str:
+                parsed_date = parse_datetime_safely(disbursal_date_str)
+                if parsed_date:
+                    disbursal_date_formatted = parsed_date.strftime('%d/%m/%Y')
+            
+            repayment_date_formatted = '—'
+            if repayment_date_str:
+                parsed_date = parse_datetime_safely(repayment_date_str)
+                if parsed_date:
+                    repayment_date_formatted = parsed_date.strftime('%d/%m/%Y')
+            
+            formatted_records.append({
+                'loan_no': record.get('loan_no', ''),
+                'pan': str(record.get('pan', '')).upper() if record.get('pan') else '',
+                'disbursal_date': disbursal_date_formatted,
+                'net_disbursal': float(record.get('net_disbursal', 0)),
+                'repayment_date': repayment_date_formatted,
+                'repayment_amount': float(record.get('repayment_amount', 0)),
+                'overdue_days': int(record.get('overdue_days', 0)),
+                'dpd_bucket': record.get('dpd_bucket', ''),
+            })
+        
+        return JsonResponse({
+            'records': formatted_records,
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_records': total_records,
+                'per_page': per_page,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+            },
+            'totals': {
+                'total_net_disbursal': float(total_net_disbursal),
+                'total_repayment_amount': float(total_repayment_amount),
+            },
+            'dpd_bucket': dpd_bucket,
+            'search': search,
         })
-    
-    return JsonResponse({
-        'records': records,
-        'pagination': {
-            'current_page': page_obj.number,
-            'total_pages': paginator.num_pages,
-            'total_records': paginator.count,
-            'per_page': per_page,
-            'has_next': page_obj.has_next(),
-            'has_previous': page_obj.has_previous(),
-        },
-        'totals': {
-            'total_net_disbursal': float(totals['total_net_disbursal'] or 0),
-            'total_repayment_amount': float(totals['total_repayment_amount'] or 0),
-        },
-        'dpd_bucket': dpd_bucket,
-        'search': search,
-    })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # Authentication Views
@@ -1498,27 +1627,16 @@ def apply_fraud_filters(records, request):
         
         if city_filter:
             # If both state and city are selected, filter by both
-            # Apply city normalization for comparison
-            filtered_records = []
-            for r in records:
-                record_city = normalize_city_name(r.get('city', ''))
-                filter_city = normalize_city_name(city_filter)
-                if record_city == filter_city:
-                    filtered_records.append(r)
-            records = filtered_records
+            # Use exact match, not normalization
+            records = [r for r in records if r.get('city', '').strip() == city_filter.strip()]
     elif city_filter:
-        # If only city is selected, filter by city (with normalization)
-        filtered_records = []
-        filter_city = normalize_city_name(city_filter)
-        for r in records:
-            record_city = normalize_city_name(r.get('city', ''))
-            if record_city == filter_city:
-                filtered_records.append(r)
-        records = filtered_records
+        # If only city is selected, filter by exact city name
+        records = [r for r in records if r.get('city', '').strip() == city_filter.strip()]
     
     return records
 
 # Fraud Summary API endpoints (using portfolio-collection-without-fraud API)
+@no_cache_api
 def api_fraud_kpi_data(request):
     """API endpoint for fraud summary KPI data"""
     try:
@@ -1613,7 +1731,19 @@ def api_fraud_kpi_data(request):
         penalty = Decimal('0')  # Assuming no penalty data in this API
         collected_amount = total_received
         pending_collection = repayment_amount - collected_amount
-        collection_rate = (collected_amount / repayment_amount * 100) if repayment_amount > 0 else 0
+        collection_rate = round((collected_amount / repayment_amount * 100), 2) if repayment_amount > 0 else 0
+        
+        # Extract filter options from filtered records (use actual city names, not normalized)
+        unique_states = sorted(list(set(record.get('state', '') for record in records if record.get('state'))))
+        unique_cities = sorted(list(set(record.get('city', '').strip() for record in records if record.get('city', '').strip())))
+        all_closed_statuses = list(set(record.get('closed_status', '') for record in records if record.get('closed_status')))
+        unique_closed_statuses = [status for status in all_closed_statuses if status not in ['Active', 'Closed']]
+        
+        # Get unique DPD buckets and normalize them from filtered records
+        all_dpd_buckets = list(set(record.get('dpd_bucket', '') for record in records if record.get('dpd_bucket')))
+        normalized_dpd_buckets = [normalize_dpd_bucket(bucket) for bucket in all_dpd_buckets if bucket]
+        bucket_order = ['0 days DPD', 'DPD 1-30', 'DPD 31-60', 'DPD 61-90', 'DPD 91-120', 'DPD 121-150', 'DPD 151-180', 'DPD 181-365', 'DPD 365+', 'No DPD']
+        unique_dpd_buckets = [bucket for bucket in bucket_order if bucket in normalized_dpd_buckets]
         
         return JsonResponse({
             'total_applications': total_applications,
@@ -1641,15 +1771,22 @@ def api_fraud_kpi_data(request):
             'penalty': float(penalty),
             'collected_amount': float(collected_amount),
             'pending_collection': float(pending_collection),
-            'collection_rate': float(collection_rate)
+            'collection_rate': float(collection_rate),
+            'filter_options': {
+                'states': unique_states,
+                'cities': unique_cities,
+                'closing_statuses': unique_closed_statuses,
+                'dpd_buckets': unique_dpd_buckets
+            }
         })
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
 def api_fraud_dpd_buckets(request):
-    """API endpoint for fraud summary DPD bucket data"""
+    """API endpoint for fraud summary DPD bucket data from Collection WITHOUT Fraud API"""
     try:
         # Fetch data from the without-fraud API
         response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
@@ -1660,14 +1797,17 @@ def api_fraud_dpd_buckets(request):
         records = data.get('cwpr', [])
         
         # Apply filters if provided
-        records = apply_fraud_filters(records, request)
+        filtered_records = apply_fraud_filters(records, request)
         
-        if not records:
+        if not filtered_records:
             return JsonResponse({'buckets': []})
+        
+        # Store the selected DPD bucket for highlighting
+        selected_dpd = request.GET.get('dpd')
         
         # Group by DPD bucket
         bucket_data = {}
-        for record in records:
+        for record in filtered_records:
             dpd_bucket = record.get('dpd_bucket', 'Unknown')
             if dpd_bucket not in bucket_data:
                 bucket_data[dpd_bucket] = {
@@ -1752,6 +1892,7 @@ def api_fraud_state_repayment(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
 def api_fraud_time_series(request):
     """API endpoint for fraud summary time series data"""
     try:
@@ -1936,270 +2077,538 @@ def api_fraud_city_uncollected(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@no_cache_api
+def api_credit_person_wise(request):
+    """Proxy endpoint for credit person wise data."""
+    start_date = request.GET.get('startDate') or request.GET.get('start_date')
+    end_date = request.GET.get('endDate') or request.GET.get('end_date')
 
+    if not start_date or not end_date:
+        return JsonResponse(
+            {'error': 'start_date and end_date query parameters are required.'},
+            status=400
+        )
 
-# Loan Count Wise API endpoints
-@require_http_methods(["GET"])
-def api_loan_count_cases(request):
-    """API endpoint for loan count wise cases analysis"""
     try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        response = requests.get(CREDIT_PERSON_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+
+        return JsonResponse({
+            'success': payload.get('success', True),
+            'message': payload.get('message', ''),
+            'data': payload.get('data', [])
+        })
+    except requests.RequestException as exc:
+        logger.error('Error fetching credit person wise data: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Failed to fetch credit person data from external service.'},
+            status=502
+        )
+    except ValueError as exc:
+        logger.error('Invalid JSON from credit person API: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Received invalid response from external service.'},
+            status=502
+        )
+
+
+@no_cache_api
+def api_not_closed_percent(request):
+    """Proxy endpoint for not closed percentage data used in Loan Count Wise tab."""
+    start_date = request.GET.get('startDate') or request.GET.get('start_date')
+    end_date = request.GET.get('endDate') or request.GET.get('end_date')
+
+    if not start_date or not end_date:
+        return JsonResponse(
+            {'error': 'start_date and end_date query parameters are required.'},
+            status=400
+        )
+
+    try:
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        response = requests.get(NOT_CLOSED_PERCENT_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+
+        return JsonResponse({
+            'success': payload.get('success', True),
+            'message': payload.get('message', ''),
+            'data': payload.get('data', [])
+        })
+    except requests.RequestException as exc:
+        logger.error('Error fetching not closed percent data: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Failed to fetch not closed percent data from external service.'},
+            status=502
+        )
+    except ValueError as exc:
+        logger.error('Invalid JSON from not closed percent API: %s', exc, exc_info=True)
+        return JsonResponse(
+            {'error': 'Received invalid response from external service.'},
+            status=502
+        )
+
+
+@no_cache_api
+def api_fraud_pending_cases_by_amount(request):
+    """API endpoint for pending cases grouped by amount bucket in Collection Without Fraud tab"""
+    try:
+        # Fetch data from the without-fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
         response.raise_for_status()
         data = response.json()
-        records = data.get('pr', [])
         
-        # Apply filters
+        # Extract the data array
+        records = data.get('cwpr', [])
+        
+        # Apply filters if provided
         filtered_records = apply_fraud_filters(records, request)
         
         if not filtered_records:
-            return JsonResponse({'data': []})
+            return JsonResponse({'buckets': []})
         
-        # Group by loan count ranges
-        loan_count_ranges = {
-            '1-5': {'min': 1, 'max': 5, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '6-10': {'min': 6, 'max': 10, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '11-20': {'min': 11, 'max': 20, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '21-50': {'min': 21, 'max': 50, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '51-100': {'min': 51, 'max': 100, 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')},
-            '100+': {'min': 101, 'max': float('inf'), 'cases': 0, 'total_amount': Decimal('0'), 'due_amount': Decimal('0')}
-        }
+        # Define amount buckets (in thousands)
+        def get_amount_bucket(amount):
+            """Categorize amount into bucket"""
+            amount_float = float(amount)
+            if amount_float < 5:
+                return '<5k'  # Include amounts below 5k
+            elif 5 <= amount_float < 10:
+                return '5-10k'
+            elif 10 <= amount_float < 20:
+                return '10-20k'
+            elif 20 <= amount_float < 30:
+                return '20-30k'  # Include 20-30k range
+            elif 30 <= amount_float < 40:  # 30-30k likely meant 30-40k
+                return '30-40k'
+            elif 40 <= amount_float < 50:
+                return '40-50k'
+            elif 50 <= amount_float < 60:
+                return '50-60k'
+            elif 60 <= amount_float < 70:
+                return '60-70k'
+            elif 70 <= amount_float < 80:
+                return '70-80k'
+            elif 80 <= amount_float < 90:
+                return '80-90k'
+            elif amount_float >= 90:
+                return '90+k'
+            else:
+                return None
         
+        # Group pending cases by amount bucket
+        # A case is pending if repayment_amount > total_received
+        bucket_data = {}
+        bucket_order = ['<5k', '5-10k', '10-20k', '20-30k', '30-40k', '40-50k', '50-60k', '60-70k', '70-80k', '80-90k', '90+k']
+        
+        # Initialize all buckets
+        for bucket in bucket_order:
+            bucket_data[bucket] = {
+                'bucket': bucket,
+                'count': 0,  # Pending cases
+                'total_count': 0,  # All cases in this bucket
+                'total_pending_amount': Decimal('0'),
+                'total_repayment_amount': Decimal('0'),
+                'total_collected_amount': Decimal('0'),
+                'pending_count': 0  # Alias for clarity when calculating percentages
+            }
+        
+        # Calculate overall totals across all buckets
+        overall_total_pending_amount = Decimal('0')
+        overall_total_loans_count = 0
+        
+        # Process records
         for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
+            repayment_amount = safe_decimal_conversion(record.get('repayment_amount', 0))
+            total_received = safe_decimal_conversion(record.get('total_received', 0))
+            closed_status = record.get('closed_status', '')
             
-            # Determine which range this loan falls into
-            for range_name, range_data in loan_count_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['cases'] += 1
-                    range_data['total_amount'] += loan_amount
-                    range_data['due_amount'] += due_amount
-                    break
+            # Use repayment_amount to determine bucket (in thousands)
+            repayment_for_bucket = max(repayment_amount, Decimal('0'))
+            repayment_in_k = float(repayment_for_bucket) / 1000
+            bucket = get_amount_bucket(repayment_in_k)
+            
+            if not bucket or bucket not in bucket_data:
+                continue
+            
+            # Update totals for all loans in this bucket
+            overall_total_loans_count += 1
+            bucket_data[bucket]['total_count'] += 1
+            bucket_data[bucket]['total_repayment_amount'] += repayment_amount
+            bucket_data[bucket]['total_collected_amount'] += total_received
+            
+            # Calculate pending amount (only relevant for not closed cases)
+            pending_amount = repayment_amount - total_received
+            if pending_amount < 0:
+                pending_amount = Decimal('0')
+            
+            if closed_status == 'Not Closed':
+                bucket_data[bucket]['count'] += 1  # Pending cases (kept for backward compatibility)
+                bucket_data[bucket]['pending_count'] += 1
+                bucket_data[bucket]['total_pending_amount'] += pending_amount
+                overall_total_pending_amount += pending_amount
         
-        # Convert to response format
+        # Convert to list and format
         result = []
-        for range_name, range_data in loan_count_ranges.items():
-            if range_data['cases'] > 0:
+        for bucket in bucket_order:
+            if bucket in bucket_data:
+                bucket_info = bucket_data[bucket]
+                total_count = bucket_info['total_count']
+                pending_count = bucket_info['pending_count']
+                total_pending_amount = bucket_info['total_pending_amount']
+                total_repayment_amount = bucket_info['total_repayment_amount']
+                
+                percentage_of_total_loans_count = (
+                    float(total_count / overall_total_loans_count * 100) if overall_total_loans_count > 0 else 0.0
+                )
+                pending_percentage_count = (
+                    float(pending_count / total_count * 100) if total_count > 0 else 0.0
+                )
+                pending_percentage_amount = (
+                    float(total_pending_amount / total_repayment_amount * 100)
+                    if total_repayment_amount > 0 else 0.0
+                )
+                
                 result.append({
-                    'range': range_name,
-                    'cases': range_data['cases'],
-                    'total_amount': float(range_data['total_amount']),
-                    'due_amount': float(range_data['due_amount']),
-                    'avg_amount': float(range_data['total_amount'] / range_data['cases']) if range_data['cases'] > 0 else 0
+                    'bucket': bucket_info['bucket'],
+                    'count': bucket_info['count'],  # Pending cases
+                    'pending_count': pending_count,
+                    'total_count': total_count,
+                    'total_pending_amount': float(total_pending_amount),
+                    'total_repayment_amount': float(total_repayment_amount),
+                    'total_collected_amount': float(bucket_info['total_collected_amount']),
+                    'pending_percentage_count': pending_percentage_count,
+                    'pending_percentage_amount': pending_percentage_amount
                 })
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan count cases data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_count_due_amount(request):
-    """API endpoint for loan count wise due amount analysis"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({'data': []})
-        
-        # Group by loan amount ranges and calculate due amounts
-        loan_ranges = {
-            '0-10K': {'min': 0, 'max': 10000, 'due_amount': Decimal('0'), 'cases': 0},
-            '10K-25K': {'min': 10000, 'max': 25000, 'due_amount': Decimal('0'), 'cases': 0},
-            '25K-50K': {'min': 25000, 'max': 50000, 'due_amount': Decimal('0'), 'cases': 0},
-            '50K-100K': {'min': 50000, 'max': 100000, 'due_amount': Decimal('0'), 'cases': 0},
-            '100K-250K': {'min': 100000, 'max': 250000, 'due_amount': Decimal('0'), 'cases': 0},
-            '250K+': {'min': 250000, 'max': float('inf'), 'due_amount': Decimal('0'), 'cases': 0}
-        }
-        
-        for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
-            
-            # Determine which range this loan falls into
-            for range_name, range_data in loan_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['due_amount'] += due_amount
-                    range_data['cases'] += 1
-                    break
-        
-        # Convert to response format
-        result = []
-        for range_name, range_data in loan_ranges.items():
-            if range_data['cases'] > 0:
-                result.append({
-                    'range': range_name,
-                    'due_amount': float(range_data['due_amount']),
-                    'cases': range_data['cases'],
-                    'avg_due_amount': float(range_data['due_amount'] / range_data['cases']) if range_data['cases'] > 0 else 0
-                })
-        
-        # Sort by due amount descending
-        result.sort(key=lambda x: x['due_amount'], reverse=True)
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan count due amount data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_amount_increase_rate(request):
-    """API endpoint for loan amount increase rate analysis"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({'data': []})
-        
-        # Group by time periods (monthly)
-        monthly_data = {}
-        
-        for record in filtered_records:
-            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-            if disbursal_date:
-                month_key = disbursal_date.strftime('%Y-%m')
-                loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-                
-                if month_key not in monthly_data:
-                    monthly_data[month_key] = {
-                        'month': month_key,
-                        'total_amount': Decimal('0'),
-                        'cases': 0,
-                        'avg_amount': Decimal('0')
-                    }
-                
-                monthly_data[month_key]['total_amount'] += loan_amount
-                monthly_data[month_key]['cases'] += 1
-        
-        # Calculate average amounts and increase rates
-        result = []
-        prev_avg_amount = None
-        
-        for month_key in sorted(monthly_data.keys()):
-            data = monthly_data[month_key]
-            data['avg_amount'] = data['total_amount'] / data['cases'] if data['cases'] > 0 else Decimal('0')
-            
-            increase_rate = 0
-            if prev_avg_amount and prev_avg_amount > 0:
-                increase_rate = float(((data['avg_amount'] - prev_avg_amount) / prev_avg_amount) * 100)
-            
-            result.append({
-                'month': data['month'],
-                'total_amount': float(data['total_amount']),
-                'cases': data['cases'],
-                'avg_amount': float(data['avg_amount']),
-                'increase_rate': increase_rate
-            })
-            
-            prev_avg_amount = data['avg_amount']
-        
-        # Take last 12 months
-        result = result[-12:] if len(result) > 12 else result
-        
-        return JsonResponse({'data': result})
-        
-    except Exception as e:
-        logger.error(f"Error fetching loan amount increase rate data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
-
-
-@require_http_methods(["GET"])
-def api_loan_count_kpi_data(request):
-    """API endpoint for loan count wise KPI data"""
-    try:
-        # Fetch data from the external API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        records = data.get('pr', [])
-        
-        # Apply filters
-        filtered_records = apply_fraud_filters(records, request)
-        
-        if not filtered_records:
-            return JsonResponse({
-                'total_cases': 0,
-                'total_due_amount': 0,
-                'avg_loan_amount': 0,
-                'highest_due_range': 'N/A',
-                'growth_rate': 0
-            })
-        
-        # Calculate KPIs
-        total_cases = len(filtered_records)
-        total_due_amount = sum(safe_decimal_conversion(record.get('due_amount', 0)) for record in filtered_records)
-        total_loan_amount = sum(safe_decimal_conversion(record.get('loan_amount', 0)) for record in filtered_records)
-        avg_loan_amount = total_loan_amount / total_cases if total_cases > 0 else Decimal('0')
-        
-        # Find range with highest due amount
-        loan_ranges = {
-            '0-10K': {'min': 0, 'max': 10000, 'due_amount': Decimal('0')},
-            '10K-25K': {'min': 10000, 'max': 25000, 'due_amount': Decimal('0')},
-            '25K-50K': {'min': 25000, 'max': 50000, 'due_amount': Decimal('0')},
-            '50K-100K': {'min': 50000, 'max': 100000, 'due_amount': Decimal('0')},
-            '100K-250K': {'min': 100000, 'max': 250000, 'due_amount': Decimal('0')},
-            '250K+': {'min': 250000, 'max': float('inf'), 'due_amount': Decimal('0')}
-        }
-        
-        for record in filtered_records:
-            loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-            due_amount = safe_decimal_conversion(record.get('due_amount', 0))
-            
-            for range_name, range_data in loan_ranges.items():
-                if range_data['min'] <= loan_amount <= range_data['max']:
-                    range_data['due_amount'] += due_amount
-                    break
-        
-        highest_due_range = max(loan_ranges.items(), key=lambda x: x[1]['due_amount'])[0]
-        
-        # Calculate growth rate (simplified - comparing last 2 months)
-        monthly_totals = {}
-        for record in filtered_records:
-            disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-            if disbursal_date:
-                month_key = disbursal_date.strftime('%Y-%m')
-                loan_amount = safe_decimal_conversion(record.get('loan_amount', 0))
-                
-                if month_key not in monthly_totals:
-                    monthly_totals[month_key] = Decimal('0')
-                monthly_totals[month_key] += loan_amount
-        
-        growth_rate = 0
-        if len(monthly_totals) >= 2:
-            sorted_months = sorted(monthly_totals.keys())
-            current_month = monthly_totals[sorted_months[-1]]
-            previous_month = monthly_totals[sorted_months[-2]]
-            
-            if previous_month > 0:
-                growth_rate = float(((current_month - previous_month) / previous_month) * 100)
         
         return JsonResponse({
-            'total_cases': total_cases,
-            'total_due_amount': float(total_due_amount),
-            'avg_loan_amount': float(avg_loan_amount),
-            'highest_due_range': highest_due_range,
-            'growth_rate': growth_rate
+            'buckets': result,
+            'overall_total_pending_amount': float(overall_total_pending_amount)
         })
         
     except Exception as e:
-        logger.error(f"Error fetching loan count KPI data: {e}")
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
+        logger.error(f"Error fetching pending cases by amount: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
+
+
+# Loan Count Wise API endpoint
+@require_http_methods(["GET"])
+def api_loan_count_wise(request):
+    """API endpoint for Loan Count Wise data"""
+    try:
+        # Get date parameters from request
+        start_date = request.GET.get('startDate', '')
+        end_date = request.GET.get('endDate', '')
+        
+        # Validate date parameters
+        if not start_date or not end_date:
+            return JsonResponse({
+                'error': 'Start date and end date are required',
+                'count_wise': [],
+                'amount_wise': []
+            }, status=400)
+        
+        # Build API URL with date parameters
+        loan_count_api_url = "https://backend.blinkrloan.com/insights/v1/dueLoanCountWise"
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        
+        logger.info(f"Fetching loan count wise data with params: {params}")
+        
+        # Fetch data from the external API
+        response = requests.get(loan_count_api_url, params=params, timeout=30)
+        response.raise_for_status()
+        api_data = response.json()
+        
+        logger.info(f"Received loan count wise data: {api_data}")
+        
+        # Extract count_wise and amount_wise data from the response
+        count_wise = api_data.get('data', {}).get('count_wise', [])
+        amount_wise = api_data.get('data', {}).get('amount_wise', [])
+        
+        return JsonResponse({
+            'success': True,
+            'message': api_data.get('message', 'Data fetched successfully'),
+            'count_wise': count_wise,
+            'amount_wise': amount_wise,
+            'filters': {
+                'start_date': start_date,
+                'end_date': end_date
+            }
+        })
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching loan count wise data from external API: {e}")
+        return JsonResponse({
+            'error': 'Failed to fetch data from external API',
+            'count_wise': [],
+            'amount_wise': []
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Error in loan count wise API: {e}", exc_info=True)
+        return JsonResponse({
+            'error': 'Failed to fetch loan count wise data',
+            'count_wise': [],
+            'amount_wise': []
+        }, status=500)
+
+
+@require_http_methods(["GET"])
+@no_cache_api
+def api_disbursal_summary(request):
+    """
+    API endpoint to fetch disbursal summary data from external API
+    Accepts startDate, endDate, state, city, reloan, and tenure query parameters
+    """
+    try:
+        start_date = request.GET.get('startDate')
+        end_date = request.GET.get('endDate')
+        
+        if not start_date or not end_date:
+            return JsonResponse({'error': 'startDate and endDate are required'}, status=400)
+        
+        # Validate date format
+        try:
+            datetime.strptime(start_date, '%Y-%m-%d')
+            datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+        
+        # Fetch data from external disbursal API
+        disbursal_api_url = 'https://backend.blinkrloan.com/insights/v1/disbursal'
+        params = {
+            'startDate': start_date,
+            'endDate': end_date
+        }
+        
+        response = requests.get(disbursal_api_url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract result array from response
+        disbursal_records = data.get('result', [])
+        
+        # Parse date range for filtering
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Filter records by disbursal_date to ensure date range is correct
+        date_filtered_records = []
+        for record in disbursal_records:
+            disbursal_date_str = record.get('disbursal_date')
+            if disbursal_date_str:
+                parsed_date = parse_datetime_safely(disbursal_date_str)
+                if parsed_date:
+                    record_date = parsed_date
+                    if isinstance(record_date, date) and start_date_obj <= record_date <= end_date_obj:
+                        date_filtered_records.append(record)
+        
+        disbursal_records = date_filtered_records
+        
+        logger.info(f"Disbursal API returned {len(data.get('result', []))} records, after date filtering: {len(disbursal_records)} records for date range {start_date} to {end_date}")
+        
+        # Get unique states and cities from ALL records (for dropdown options)
+        unique_states = sorted(set(r.get('state') for r in disbursal_records if r.get('state')))
+        unique_cities_all = sorted(set(r.get('city') for r in disbursal_records if r.get('city')))
+        
+        # Apply filters
+        state_filter = request.GET.get('state')
+        city_filter = request.GET.get('city')
+        reloan_filter = request.GET.get('reloan')
+        tenure_filter = request.GET.get('tenure')
+        
+        filtered_records = disbursal_records.copy()
+        
+        # Filter by state
+        if state_filter:
+            filtered_records = [r for r in filtered_records if r.get('state') == state_filter]
+            unique_cities_all = sorted(set(r.get('city') for r in filtered_records if r.get('city')))
+        
+        # Filter by city
+        if city_filter:
+            filtered_records = [r for r in filtered_records if r.get('city', '').strip() == city_filter.strip()]
+        
+        # Filter by reloan status
+        if reloan_filter:
+            if reloan_filter.lower() == 'true':
+                filtered_records = [r for r in filtered_records if r.get('is_reloan_case', False) == True]
+            elif reloan_filter.lower() == 'false':
+                filtered_records = [r for r in filtered_records if r.get('is_reloan_case', False) == False]
+        
+        # Filter by tenure
+        if tenure_filter:
+            try:
+                if '-' in tenure_filter:
+                    min_tenure, max_tenure = map(int, tenure_filter.split('-'))
+                    filtered_records = [r for r in filtered_records if min_tenure <= r.get('tenure', 0) <= max_tenure]
+                else:
+                    tenure_value = int(tenure_filter)
+                    filtered_records = [r for r in filtered_records if r.get('tenure', 0) == tenure_value]
+            except (ValueError, AttributeError):
+                pass
+        
+        # Calculate summary statistics
+        total_records = len(filtered_records)
+        total_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in filtered_records)
+        total_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in filtered_records)
+        total_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in filtered_records)
+        total_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in filtered_records)
+        total_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in filtered_records)
+        
+        # Count by status
+        closed_count = sum(1 for r in filtered_records if r.get('is_lead_closed', False))
+        open_count = total_records - closed_count
+        reloan_count = sum(1 for r in filtered_records if r.get('is_reloan_case', False))
+        fresh_count = total_records - reloan_count
+        
+        # Calculate Fresh and Reloan breakdowns
+        fresh_records = [r for r in filtered_records if not r.get('is_reloan_case', False)]
+        reloan_records = [r for r in filtered_records if r.get('is_reloan_case', False)]
+        
+        fresh_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in fresh_records)
+        fresh_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in fresh_records)
+        fresh_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in fresh_records)
+        fresh_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in fresh_records)
+        fresh_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in fresh_records)
+        
+        reloan_loan_amount = sum(safe_decimal_conversion(r.get('loan_amount', 0)) for r in reloan_records)
+        reloan_disbursal_amount = sum(safe_decimal_conversion(r.get('Disbursal_Amt', 0)) for r in reloan_records)
+        reloan_repayment_amount = sum(safe_decimal_conversion(r.get('repayment_amount', 0)) for r in reloan_records)
+        reloan_processing_fee = sum(safe_decimal_conversion(r.get('processing_fee', 0)) for r in reloan_records)
+        reloan_interest_amount = sum(safe_decimal_conversion(r.get('interest_amount', 0)) for r in reloan_records)
+        
+        # Aggregate data by state for pie chart
+        state_aggregated = {}
+        for record in filtered_records:
+            state = record.get('state', 'Unknown')
+            if state not in state_aggregated:
+                state_aggregated[state] = {
+                    'count': 0,
+                    'loan_amount': Decimal('0'),
+                    'disbursal_amount': Decimal('0')
+                }
+            state_aggregated[state]['count'] += 1
+            state_aggregated[state]['loan_amount'] += safe_decimal_conversion(record.get('loan_amount', 0))
+            state_aggregated[state]['disbursal_amount'] += safe_decimal_conversion(record.get('Disbursal_Amt', 0))
+        
+        state_chart_data = []
+        for state, data in sorted(state_aggregated.items(), key=lambda x: x[1]['loan_amount'], reverse=True):
+            state_chart_data.append({
+                'state': state,
+                'count': data['count'],
+                'loan_amount': float(data['loan_amount']),
+                'disbursal_amount': float(data['disbursal_amount'])
+            })
+        
+        # Aggregate data by city for pie chart
+        city_aggregated = {}
+        for record in filtered_records:
+            city = record.get('city', 'Unknown')
+            record_state = record.get('state', 'Unknown')
+            
+            if state_filter and record_state != state_filter:
+                continue
+                
+            if city not in city_aggregated:
+                city_aggregated[city] = {
+                    'count': 0,
+                    'loan_amount': Decimal('0'),
+                    'disbursal_amount': Decimal('0'),
+                    'state': record_state
+                }
+            city_aggregated[city]['count'] += 1
+            city_aggregated[city]['loan_amount'] += safe_decimal_conversion(record.get('loan_amount', 0))
+            city_aggregated[city]['disbursal_amount'] += safe_decimal_conversion(record.get('Disbursal_Amt', 0))
+        
+        city_chart_data = []
+        sorted_cities = sorted(city_aggregated.items(), key=lambda x: x[1]['loan_amount'], reverse=True)[:15]
+        for city, data in sorted_cities:
+            city_chart_data.append({
+                'city': city,
+                'state': data['state'],
+                'count': data['count'],
+                'loan_amount': float(data['loan_amount']),
+                'disbursal_amount': float(data['disbursal_amount'])
+            })
+        
+        # Pagination
+        try:
+            page = int(request.GET.get('page', 1))
+            if page < 1:
+                page = 1
+        except (ValueError, TypeError):
+            page = 1
+        
+        per_page = 10
+        total_pages = (total_records + per_page - 1) // per_page if total_records > 0 else 1
+        if page > total_pages and total_pages > 0:
+            page = total_pages
+        
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_records = filtered_records[start_idx:end_idx]
+        
+        return JsonResponse({
+            'records': paginated_records,
+            'summary': {
+                'total_records': total_records,
+                'total_loan_amount': float(total_loan_amount),
+                'total_disbursal_amount': float(total_disbursal_amount),
+                'total_repayment_amount': float(total_repayment_amount),
+                'total_processing_fee': float(total_processing_fee),
+                'total_interest_amount': float(total_interest_amount),
+                'closed_count': closed_count,
+                'open_count': open_count,
+                'reloan_count': reloan_count,
+                'fresh_count': fresh_count,
+                'fresh_loan_amount': float(fresh_loan_amount),
+                'fresh_disbursal_amount': float(fresh_disbursal_amount),
+                'fresh_repayment_amount': float(fresh_repayment_amount),
+                'fresh_processing_fee': float(fresh_processing_fee),
+                'fresh_interest_amount': float(fresh_interest_amount),
+                'reloan_loan_amount': float(reloan_loan_amount),
+                'reloan_disbursal_amount': float(reloan_disbursal_amount),
+                'reloan_repayment_amount': float(reloan_repayment_amount),
+                'reloan_processing_fee': float(reloan_processing_fee),
+                'reloan_interest_amount': float(reloan_interest_amount)
+            },
+            'pagination': {
+                'current_page': page,
+                'total_pages': total_pages,
+                'total_records': total_records,
+                'per_page': per_page,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
+            },
+            'filters': {
+                'unique_states': unique_states,
+                'unique_cities': unique_cities_all
+            },
+            'chart_data': {
+                'state': state_chart_data,
+                'city': city_chart_data
+            },
+            'start_date': start_date,
+            'end_date': end_date
+        })
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching disbursal data from external API: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to fetch data from external API'}, status=500)
+    except Exception as e:
+        logger.error(f"Error processing disbursal summary: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to process data'}, status=500)

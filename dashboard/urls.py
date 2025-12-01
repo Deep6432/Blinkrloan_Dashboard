@@ -26,9 +26,13 @@ urlpatterns = [
     path('api/fraud/city-collected/', views.api_fraud_city_collected, name='api_fraud_city_collected'),
     path('api/fraud/city-uncollected/', views.api_fraud_city_uncollected, name='api_fraud_city_uncollected'),
     path('api/fraud/total-applications-details/', views.api_fraud_total_applications_details, name='api_fraud_total_applications_details'),
-    # Loan Count Wise API endpoints
-    path('api/loan-count/kpi-data/', views.api_loan_count_kpi_data, name='api_loan_count_kpi_data'),
-    path('api/loan-count/cases/', views.api_loan_count_cases, name='api_loan_count_cases'),
-    path('api/loan-count/due-amount/', views.api_loan_count_due_amount, name='api_loan_count_due_amount'),
-    path('api/loan-count/increase-rate/', views.api_loan_amount_increase_rate, name='api_loan_amount_increase_rate'),
+    path('api/fraud/pending-cases-by-amount/', views.api_fraud_pending_cases_by_amount, name='api_fraud_pending_cases_by_amount'),
+    # Loan Count Wise API endpoint
+    path('api/loan-count-wise/', views.api_loan_count_wise, name='api_loan_count_wise'),
+    # Credit Person Wise API endpoint
+    path('api/credit-person-wise/', views.api_credit_person_wise, name='api_credit_person_wise'),
+    # Not Closed Percent API endpoint
+    path('api/not-closed-percent/', views.api_not_closed_percent, name='api_not_closed_percent'),
+    # Disbursal Summary API endpoint
+    path('api/disbursal-summary/', views.api_disbursal_summary, name='api_disbursal_summary'),
 ]
