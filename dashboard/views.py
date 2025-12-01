@@ -2748,7 +2748,7 @@ def api_daily_performance_metrics(request):
         
         # 3. HISTORICAL COLLECTION EFFICIENCY
         # Calculate for June to November (6 months) from collection with fraud API data
-        # For each month, calculate efficiency for loans disbursed up to and including that month
+        # For each month, calculate efficiency for loans disbursed IN that specific month (not cumulative)
         historical_data = []
         
         # Define the months to show: June (6) to November (11) of current year
@@ -2761,11 +2761,11 @@ def api_daily_performance_metrics(request):
             hist_days_in_month = calendar.monthrange(hist_year, hist_month)[1]
             hist_month_end = date(hist_year, hist_month, hist_days_in_month)
             
-            # Filter records for historical month: loans disbursed up to and including this month
+            # Filter records for historical month: loans disbursed IN this specific month only
             hist_records = []
             for record in filtered_records:
                 disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
-                if disbursal_date and disbursal_date <= hist_month_end:
+                if disbursal_date and hist_month_start <= disbursal_date <= hist_month_end:
                     hist_records.append(record)
             
             # Calculate collection efficiency for historical month
