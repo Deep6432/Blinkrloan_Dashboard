@@ -4063,8 +4063,14 @@ async function exportAumReport() {
         } else if (isTillPrevMonthActive) {
             // Use last day of previous month
             const today = new Date();
-            const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 0);
-            reportDate = prevMonth.toISOString().split('T')[0];
+            // Get the last day of the previous month by using day 0 of current month
+            // new Date(year, month, 0) gives the last day of the previous month
+            const prevMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            // Format date manually to avoid timezone issues
+            const year = prevMonth.getFullYear();
+            const month = String(prevMonth.getMonth() + 1).padStart(2, '0');
+            const day = String(prevMonth.getDate()).padStart(2, '0');
+            reportDate = `${year}-${month}-${day}`;
         }
         // If tillDate is active or no button is active, use today's date (default)
         
@@ -9715,7 +9721,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <p class="text-sm text-gray-400">Assets Under Management Report</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 flex-nowrap">
+                            <div class="flex items-center gap-4 flex-nowrap">
                                 <button
                                     id="aumTillDateBtn"
                                     onclick="loadAumDataTillDate()"
