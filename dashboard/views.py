@@ -731,13 +731,13 @@ def api_state_repayment(request):
 @require_http_methods(["GET"])
 @no_cache_api
 def api_kpi_data(request):
-    """API endpoint for KPI data - now uses Collection WITH Fraud API directly"""
+    """API endpoint for KPI data - uses Collection WITHOUT Fraud API for Collection Without Fraud tab"""
     try:
-        # Fetch data from the Collection WITH Fraud API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        # Fetch data from the Collection WITHOUT Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
         response.raise_for_status()
         data = response.json()
-        records = data.get('pr', [])
+        records = data.get('cwpr', [])
 
         # Apply filters to the records
         filtered_records = apply_fraud_filters(records, request)
@@ -811,15 +811,15 @@ def api_kpi_data(request):
 @require_http_methods(["GET"])
 @no_cache_api
 def api_city_collected(request):
-    """API endpoint for top 10 cities by collection percentage from Collection WITH Fraud API"""
+    """API endpoint for top 10 cities by collection percentage from Collection WITHOUT Fraud API"""
     try:
-        # Fetch data from the Collection WITH Fraud API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        # Fetch data from the Collection WITHOUT Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
         response.raise_for_status()
         data = response.json()
         
         # Extract the data array
-        records = data.get('pr', [])
+        records = data.get('cwpr', [])
         
         # Apply filters to the records
         filtered_records = apply_fraud_filters(records, request)
@@ -874,15 +874,15 @@ def api_city_collected(request):
 @require_http_methods(["GET"])
 @no_cache_api
 def api_city_uncollected(request):
-    """API endpoint for top 10 cities by collection percentage (worst performers) from Collection WITH Fraud API"""
+    """API endpoint for top 10 cities by collection percentage (worst performers) from Collection WITHOUT Fraud API"""
     try:
-        # Fetch data from the Collection WITH Fraud API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        # Fetch data from the Collection WITHOUT Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
         response.raise_for_status()
         data = response.json()
         
         # Extract the data array
-        records = data.get('pr', [])
+        records = data.get('cwpr', [])
         
         # Apply filters to the records
         filtered_records = apply_fraud_filters(records, request)
@@ -939,15 +939,15 @@ def api_city_uncollected(request):
 @require_http_methods(["GET"])
 @no_cache_api
 def api_time_series(request):
-    """API endpoint for time series data from Collection WITH Fraud API"""
+    """API endpoint for time series data from Collection WITHOUT Fraud API"""
     try:
-        # Fetch data from the Collection WITH Fraud API
-        response = requests.get(settings.EXTERNAL_API_URL, timeout=30)
+        # Fetch data from the Collection WITHOUT Fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
         response.raise_for_status()
         data = response.json()
         
         # Extract the data array
-        records = data.get('pr', [])
+        records = data.get('cwpr', [])
         
         # Apply filters to the records
         filtered_records = apply_fraud_filters(records, request)
@@ -1718,14 +1718,14 @@ def api_fraud_kpi_data(request):
         interest_amount = sum(Decimal(str(record.get('interest_amount', 0))) for record in records)
         total_received = sum(Decimal(str(record.get('total_received', 0))) for record in records)
         
-        # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
-        not_closed_records = [r for r in records if r.get('closed_status') == 'Not Closed']
-        not_closed_fresh_records = [r for r in fresh_records if r.get('closed_status') == 'Not Closed']
-        not_closed_reloan_records = [r for r in reloan_records if r.get('closed_status') == 'Not Closed']
+        # Calculate principal outstanding (SUM(total_received) - SUM(sanction_amount) - SUM(interest_amount) for ALL records)
+        # Note: loan_amount represents the sanction amount in the API response
+        # Formula: Principal Outstanding = total_received - sanction_amount - interest_amount
         
-        principal_outstanding_amount = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_records)
-        fresh_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_fresh_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_fresh_records)
-        reloan_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_reloan_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_reloan_records)
+        # Use loan_amount as sanction_amount (sanction_amount field may not exist in API, loan_amount is the sanction amount)
+        principal_outstanding_amount = sum(Decimal(str(r.get('total_received', 0))) for r in records) - sum(Decimal(str(r.get('loan_amount', 0))) for r in records) - sum(Decimal(str(r.get('interest_amount', 0))) for r in records)
+        fresh_principal_outstanding = sum(Decimal(str(r.get('total_received', 0))) for r in fresh_records) - sum(Decimal(str(r.get('loan_amount', 0))) for r in fresh_records) - sum(Decimal(str(r.get('interest_amount', 0))) for r in fresh_records)
+        reloan_principal_outstanding = sum(Decimal(str(r.get('total_received', 0))) for r in reloan_records) - sum(Decimal(str(r.get('loan_amount', 0))) for r in reloan_records) - sum(Decimal(str(r.get('interest_amount', 0))) for r in reloan_records)
         
         earning = processing_fee + interest_amount
         penalty = Decimal('0')  # Assuming no penalty data in this API
@@ -1772,6 +1772,7 @@ def api_fraud_kpi_data(request):
             'collected_amount': float(collected_amount),
             'pending_collection': float(pending_collection),
             'collection_rate': float(collection_rate),
+            'collected_percentage': float(collection_rate),  # Alias for frontend compatibility
             'filter_options': {
                 'states': unique_states,
                 'cities': unique_cities,
@@ -2811,3 +2812,57 @@ def api_daily_performance_metrics(request):
     except Exception as e:
         logger.error(f"Error fetching daily performance metrics: {e}", exc_info=True)
         return JsonResponse({'error': 'Failed to fetch data'}, status=500)
+
+
+@require_http_methods(["GET"])
+@no_cache_api
+def api_aum_report(request):
+    """API endpoint to fetch AUM report data from external API"""
+    try:
+        # Check which type of request this is
+        till_prev_month = request.GET.get('till_prev_month', 'false').lower() == 'true'
+        till_prev_date = request.GET.get('till_prev_date', 'false').lower() == 'true'
+        
+        # Use the appropriate API endpoint based on the request
+        if till_prev_month:
+            # Use the till previous month endpoint
+            aum_api_url = 'https://backend.blinkrloan.com/insights/v1/aum-report-till-previous-month'
+        elif till_prev_date:
+            # Use the till previous day endpoint
+            aum_api_url = 'https://backend.blinkrloan.com/insights/v1/aum-report-till-previous-day'
+        else:
+            # Use the regular endpoint for current data (till date)
+            aum_api_url = 'https://backend.blinkrloan.com/insights/v1/aum-report'
+        
+        response = requests.get(aum_api_url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array from response
+        aum_data = data.get('data', [])
+        
+        # Filter out the total row (is_total: true) and process monthly data
+        monthly_data = [item for item in aum_data if not item.get('is_total', False)]
+        total_data = next((item for item in aum_data if item.get('is_total', False)), None)
+        
+        # Log for debugging
+        if total_data:
+            logger.info(f"AUM total_data found: {total_data}")
+            # Ensure aum_sum field exists - use running_sum if aum_sum is not present
+            if 'aum_sum' not in total_data and 'running_sum' in total_data:
+                total_data['aum_sum'] = total_data['running_sum']
+        else:
+            logger.warning("AUM total_data not found in API response")
+        
+        return JsonResponse({
+            'success': True,
+            'monthly_data': monthly_data,
+            'total_data': total_data
+        })
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching AUM data from external API: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to fetch data from external API'}, status=500)
+    except Exception as e:
+        logger.error(f"Error processing AUM report: {e}", exc_info=True)
+        return JsonResponse({'error': 'Failed to process data'}, status=500)

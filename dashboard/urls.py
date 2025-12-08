@@ -37,4 +37,6 @@ urlpatterns = [
     path('api/disbursal-summary/', views.api_disbursal_summary, name='api_disbursal_summary'),
     # Daily Performance Metrics API endpoint
     path('api/daily-performance-metrics/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
+    # AUM Report API endpoint
+    path('api/aum-report/', views.api_aum_report, name='api_aum_report'),
 ]
