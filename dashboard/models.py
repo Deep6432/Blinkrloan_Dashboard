@@ -2,6 +2,55 @@ from django.db import models
 from django.core.validators import MinValueValidator
 
 
+class MonthlyTarget(models.Model):
+    """Model to store monthly sanction target"""
+    
+    month = models.IntegerField()  # 1-12 for Jan-Dec
+    year = models.IntegerField()
+    target_amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(0)])
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['month', 'year']
+        ordering = ['-year', '-month']
+        verbose_name = 'Monthly Target'
+        verbose_name_plural = 'Monthly Targets'
+
+    def __str__(self):
+        month_names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return f"{month_names[self.month]} {self.year} - ₹{self.target_amount:,.2f}"
+
+    @classmethod
+    def get_current_month_target(cls):
+        """Get target for current month"""
+        from datetime import datetime
+        now = datetime.now()
+        try:
+            target = cls.objects.get(month=now.month, year=now.year)
+            return target.target_amount
+        except cls.DoesNotExist:
+            return 0
+
+    @classmethod
+    def set_current_month_target(cls, amount):
+        """Set target for current month"""
+        from datetime import datetime
+        from decimal import Decimal
+        
+        now = datetime.now()
+        target, created = cls.objects.get_or_create(
+            month=now.month,
+            year=now.year,
+            defaults={'target_amount': Decimal(str(amount))}
+        )
+        if not created:
+            target.target_amount = Decimal(str(amount))
+            target.save()
+        return target
+
+
 class LoanRecord(models.Model):
     """Model to store loan portfolio data"""
     

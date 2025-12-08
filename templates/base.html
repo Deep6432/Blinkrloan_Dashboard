@@ -13,6 +13,7 @@
     <link rel="apple-touch-icon" href="{% static 'images/favicon.png' %}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
         <script>
             tailwind.config = {
@@ -177,6 +178,11 @@
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
         Chart.defaults.backgroundColor = '#334155';
+        
+        // Register ChartDataLabels plugin if available
+        if (typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
     </script>
 </body>
 </html>

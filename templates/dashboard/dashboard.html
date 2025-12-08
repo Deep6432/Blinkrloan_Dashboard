@@ -1569,21 +1569,25 @@ if (window.history.replaceState) {
             
             if (originalChart && originalChart.data) {
                 const originalData = originalChart.data;
+                // Get chart type - Chart.js v3+ uses config.type
+                const chartType = originalChart.config?.type || originalChart.type || 'bar';
+                // Get plugins from config or use empty array
+                const originalPlugins = originalChart.config?.plugins || [];
                 
                 // Create new chart instance for fullscreen with enhanced options
                 window.fullscreenChartInstance = new Chart(ctx, {
-                    type: originalChart.config.type,
+                    type: chartType,
                     data: {
                         labels: originalData.labels,
                         datasets: originalData.datasets.map(dataset => {
                             const enhancedDataset = { ...dataset };
                             
                             // Enhance different chart types appropriately
-                            if (originalChart.config.type === 'line') {
+                            if (chartType === 'line') {
                                 enhancedDataset.pointRadius = dataset.pointRadius ? dataset.pointRadius * 1.5 : 6;
                                 enhancedDataset.pointHoverRadius = dataset.pointHoverRadius ? dataset.pointHoverRadius * 1.5 : 8;
                                 enhancedDataset.borderWidth = dataset.borderWidth ? dataset.borderWidth * 1.5 : 3;
-                            } else if (originalChart.config.type === 'bar') {
+                            } else if (chartType === 'bar') {
                                 enhancedDataset.borderWidth = dataset.borderWidth ? dataset.borderWidth * 1.5 : 2;
                                 enhancedDataset.borderRadius = dataset.borderRadius ? dataset.borderRadius * 1.5 : 6;
                             }
@@ -1591,7 +1595,7 @@ if (window.history.replaceState) {
                             return enhancedDataset;
                         })
                     },
-                    plugins: originalChart.config.plugins,
+                    plugins: originalPlugins,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
@@ -1616,7 +1620,7 @@ if (window.history.replaceState) {
                                 bodyFont: {
                                     size: 14
                                 },
-                                callbacks: originalChart.options.plugins.tooltip.callbacks
+                                callbacks: originalChart.options?.plugins?.tooltip?.callbacks || {}
                             },
                             datalabels: {
                                 display: function(context) {
@@ -1680,24 +1684,27 @@ if (window.history.replaceState) {
                                 }
                             }
                         },
-                        scales: originalChart.options.scales ? {
+                        indexAxis: originalChart.options?.indexAxis || undefined,
+                        scales: originalChart.options?.scales ? {
                             ...originalChart.options.scales,
-                            x: {
+                            x: originalChart.options.scales.x ? {
                                 ...originalChart.options.scales.x,
                                 grid: {
+                                    ...originalChart.options.scales.x.grid,
                                     color: '#334155'
                                 },
                                 ticks: {
-                                    ...originalChart.options.scales.x?.ticks,
+                                    ...originalChart.options.scales.x.ticks,
                                     color: '#94a3b8',
                                     font: {
                                         size: 14
                                     }
                                 }
-                            },
+                            } : undefined,
                             y: originalChart.options.scales.y ? {
                                 ...originalChart.options.scales.y,
                                 grid: {
+                                    ...originalChart.options.scales.y.grid,
                                     color: '#334155'
                                 },
                                 ticks: {
@@ -2042,7 +2049,7 @@ async function loadTopCitiesCollectionChart(filterParams = null) {
                     }
                 }
             },
-            plugins: [ChartDataLabels]
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
         });
         
     } catch (error) {
@@ -2333,7 +2340,7 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
                     }
                 }
             },
-            plugins: [ChartDataLabels]
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
         });
         
     } catch (error) {
@@ -4776,7 +4783,14 @@ async function refreshKPIData(params) {
             // Update Fresh Percentage
             const freshPercentageElement = document.getElementById('freshPercentage');
             if (freshPercentageElement) {
-                freshPercentageElement.textContent = kpis.fresh_percentage.toFixed(1);
+                const freshPct = kpis.fresh_percentage;
+                // Convert to number if it's a string
+                const freshPctNum = typeof freshPct === 'string' ? parseFloat(freshPct) : freshPct;
+                if (freshPctNum !== undefined && freshPctNum !== null && !isNaN(freshPctNum)) {
+                    freshPercentageElement.textContent = freshPctNum.toFixed(1);
+                } else {
+                    freshPercentageElement.textContent = '0.0';
+                }
             }
             
             // Update Reloan Cases
@@ -4788,7 +4802,14 @@ async function refreshKPIData(params) {
             // Update Reloan Percentage
             const reloanPercentageElement = document.getElementById('reloanPercentage');
             if (reloanPercentageElement) {
-                reloanPercentageElement.textContent = kpis.reloan_percentage.toFixed(1);
+                const reloanPct = kpis.reloan_percentage;
+                // Convert to number if it's a string
+                const reloanPctNum = typeof reloanPct === 'string' ? parseFloat(reloanPct) : reloanPct;
+                if (reloanPctNum !== undefined && reloanPctNum !== null && !isNaN(reloanPctNum)) {
+                    reloanPercentageElement.textContent = reloanPctNum.toFixed(1);
+                } else {
+                    reloanPercentageElement.textContent = '0.0';
+                }
             }
             
             // Update Sanction Amount
@@ -4856,8 +4877,10 @@ async function refreshKPIData(params) {
             const collectedPercentageElement = document.getElementById('collectedPercentage');
             if (collectedPercentageElement) {
                 const collectedPct = kpis.collected_percentage;
-                if (collectedPct !== undefined && collectedPct !== null && !isNaN(collectedPct)) {
-                    collectedPercentageElement.textContent = collectedPct.toFixed(2) + '% of Repayment';
+                // Convert to number if it's a string
+                const collectedPctNum = typeof collectedPct === 'string' ? parseFloat(collectedPct) : collectedPct;
+                if (collectedPctNum !== undefined && collectedPctNum !== null && !isNaN(collectedPctNum)) {
+                    collectedPercentageElement.textContent = collectedPctNum.toFixed(2) + '% of Repayment';
                 } else {
                     collectedPercentageElement.textContent = '0.00% of Repayment';
                 }
@@ -4884,7 +4907,14 @@ async function refreshKPIData(params) {
             // Update Pending Percentage
             const pendingPercentageElement = document.getElementById('pendingPercentage');
             if (pendingPercentageElement) {
-                pendingPercentageElement.textContent = kpis.pending_percentage.toFixed(2) + '% of Repayment';
+                const pendingPct = kpis.pending_percentage;
+                // Convert to number if it's a string
+                const pendingPctNum = typeof pendingPct === 'string' ? parseFloat(pendingPct) : pendingPct;
+                if (pendingPctNum !== undefined && pendingPctNum !== null && !isNaN(pendingPctNum)) {
+                    pendingPercentageElement.textContent = pendingPctNum.toFixed(2) + '% of Repayment';
+                } else {
+                    pendingPercentageElement.textContent = '0.00% of Repayment';
+                }
             }
             
             // Update Fresh Pending Amount
@@ -5277,7 +5307,18 @@ async function loadTimeSeriesChart(filterParams = null) {
             pendingCasesPercentElement.textContent = pendingPercent + '% of Total';
         }
         
-        const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+        // Check if the canvas element exists before trying to access it
+        const timeSeriesCanvas = document.getElementById('timeSeriesChart');
+        if (!timeSeriesCanvas) {
+            console.warn('Time series chart canvas not found, skipping chart creation');
+            return;
+        }
+        
+        const ctx = timeSeriesCanvas.getContext('2d');
+        if (!ctx) {
+            console.error('Could not get 2d context from time series chart canvas');
+            return;
+        }
         
         // Destroy existing chart if it exists
         if (window.timeSeriesChartInstance) {
@@ -5329,7 +5370,7 @@ async function loadTimeSeriesChart(filterParams = null) {
                     }
                 ]
             },
-            plugins: [ChartDataLabels],
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -5407,7 +5448,12 @@ async function loadTimeSeriesChart(filterParams = null) {
     } catch (error) {
         console.error('Error loading time series chart:', error);
         // Show error message in the chart container
-        const chartContainer = document.getElementById('timeSeriesChart').parentElement;
+        const timeSeriesChartEl = document.getElementById('timeSeriesChart');
+        if (!timeSeriesChartEl || !timeSeriesChartEl.parentElement) {
+            console.warn('Time series chart container not found');
+            return;
+        }
+        const chartContainer = timeSeriesChartEl.parentElement;
         chartContainer.innerHTML = '<div class="flex items-center justify-center h-80 text-red-500">Error loading chart: ' + error.message + '</div>';
     }
 }
@@ -7416,11 +7462,12 @@ async function loadAumData(silentRefresh = false, tillDate = null) {
         // Hide loading only if it was shown
         if (!silentRefresh && loadingEl) loadingEl.classList.add('hidden');
         
-        if (!data.success || !data.monthly_data || data.monthly_data.length === 0) {
+        // Check if we have monthly data (the API doesn't return a 'success' field)
+        if (!data.monthly_data || data.monthly_data.length === 0) {
             if (!silentRefresh) {
-            if (errorEl) {
-                errorEl.classList.remove('hidden');
-                document.getElementById('aumErrorMessage').textContent = 'No data available';
+                if (errorEl) {
+                    errorEl.classList.remove('hidden');
+                    document.getElementById('aumErrorMessage').textContent = 'No data available';
                 }
             }
             return;
@@ -8436,7 +8483,7 @@ function loadFraudCityCollectedChart(filters = {}) {
                         borderRadius: 4,
                     }]
                 },
-                plugins: [ChartDataLabels],
+                plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
@@ -8550,7 +8597,7 @@ function loadFraudCityUncollectedChart(filters = {}) {
                         borderRadius: 4,
                     }]
                 },
-                plugins: [ChartDataLabels],
+                plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
