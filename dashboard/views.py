@@ -2691,14 +2691,14 @@ def api_daily_performance_metrics(request):
         for record in current_month_records:
             disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
             if disbursal_date == today:
-                today_disbursement += safe_decimal_conversion(record.get('net_disbursal', 0))
+                today_disbursement += safe_decimal_conversion(record.get('loan_amount', 0))
         
         # Total achieved till today
         total_achieved = Decimal('0')
         for record in current_month_records:
             disbursal_date = parse_datetime_safely(record.get('disbursal_date'))
             if disbursal_date and disbursal_date <= today:
-                total_achieved += safe_decimal_conversion(record.get('net_disbursal', 0))
+                total_achieved += safe_decimal_conversion(record.get('loan_amount', 0))
         
         # Calculate metrics
         achievement_percentage = float((total_achieved / monthly_target) * 100) if monthly_target > 0 else 0
@@ -2762,8 +2762,8 @@ def api_daily_performance_metrics(request):
         # Formula: (Total Collected in that month / Total Repayment Amount in that month) × 100
         historical_data = []
         
-        # Define the months to show: June (6) to November (11) of current year
-        months_to_show = [6, 7, 8, 9, 10, 11]  # June to November
+        # Define the months to show: November (11) to June (6) of current year (descending order - most recent first)
+        months_to_show = [11, 10, 9, 8, 7, 6]  # November to June (descending order)
         
         for hist_month in months_to_show:
             hist_year = current_year
