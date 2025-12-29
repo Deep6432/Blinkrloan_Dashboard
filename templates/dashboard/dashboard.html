@@ -3206,9 +3206,18 @@ async function loadDailyPerformanceData(silentRefresh = false) {
             if (mainContentEl) mainContentEl.classList.remove('hidden');
         }
         
-        // Update position date
-        if (data.position_as_on) {
-            document.getElementById('positionDate').textContent = data.position_as_on;
+        // Update position date - always use today's date (local timezone)
+        const positionDateEl = document.getElementById('positionDate');
+        if (positionDateEl) {
+            const today = new Date();
+            // Get local date components to avoid timezone issues
+            const day = String(today.getDate()).padStart(2, '0');
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = monthNames[today.getMonth()];
+            const year = String(today.getFullYear()).slice(-2); // Last 2 digits of year
+            const formattedDate = `${day}-${month}-${year}`;
+            // Always use today's date, ignore API date
+            positionDateEl.textContent = formattedDate;
         }
         
         // Update Sanction Performance section
@@ -9797,6 +9806,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="flex gap-6 text-sm text-gray-300">
                     <div>Position as on: <span id="positionDate" class="text-white font-medium">--</span></div>
                 </div>
+                <script>
+                    // Function to set today's date (local timezone)
+                    function setTodayDate() {
+                        const today = new Date();
+                        // Get local date components to avoid timezone issues
+                        const day = String(today.getDate()).padStart(2, '0');
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const month = monthNames[today.getMonth()];
+                        const year = String(today.getFullYear()).slice(-2); // Last 2 digits of year
+                        const formattedDate = `${day}-${month}-${year}`;
+                        const positionDateEl = document.getElementById('positionDate');
+                        if (positionDateEl) {
+                            positionDateEl.textContent = formattedDate;
+                        }
+                    }
+                    
+                    // Set date on page load
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', setTodayDate);
+                    } else {
+                        setTodayDate();
+                    }
+                    
+                    // Also set when tab is shown
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const dailyPerformanceTab = document.getElementById('dailyPerformanceTab');
+                        if (dailyPerformanceTab) {
+                            dailyPerformanceTab.addEventListener('click', function() {
+                                setTimeout(setTodayDate, 100);
+                            });
+                        }
+                    });
+                </script>
             </div>
 
             <!-- Sanction Performance Section -->
@@ -10187,7 +10229,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </svg>
                                 </div>
                                 <div>
-                                    <h2 class="text-2xl sm:text-3xl font-bold text-white mb-1">AUM Report</h2>
+                                    <div class="flex items-center gap-3 mb-1">
+                                        <h2 class="text-2xl sm:text-3xl font-bold text-white">AUM Report</h2>
+                                        <span class="px-3 py-1 bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-xs font-bold rounded-full uppercase tracking-wide">UNDER DEVELOPMENT</span>
+                                    </div>
                                     <p class="text-sm text-gray-400">Assets Under Management Report</p>
                                 </div>
                             </div>
@@ -10236,6 +10281,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </svg>
                                 Export to Excel
                             </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Development Notice -->
+                    <div class="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                        <div class="flex items-start gap-3">
+                            <svg class="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                            <div>
+                                <p class="text-yellow-300 font-semibold mb-1">Development Notice</p>
+                                <p class="text-yellow-200/80 text-sm">Some changes are under development. In the database, new data schema is under update from backend side.</p>
                             </div>
                         </div>
                     </div>
