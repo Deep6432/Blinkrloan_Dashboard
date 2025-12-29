@@ -181,6 +181,15 @@ if (window.history.replaceState) {
                         <span class="sm:hidden">Credit</span>
                     </div>
                 </button>
+                <button id="aumReportTab" onclick="switchTab('aumReport')" class="flex-1 px-1 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium rounded-md transition-colors tab-button">
+                    <div class="flex items-center justify-center gap-1 sm:gap-2">
+                        <svg class="h-3 w-3 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <span class="hidden sm:inline">AUM Report</span>
+                        <span class="sm:hidden">AUM</span>
+                    </div>
+                </button>
             </div>
         </div>
 
@@ -1560,21 +1569,25 @@ if (window.history.replaceState) {
             
             if (originalChart && originalChart.data) {
                 const originalData = originalChart.data;
+                // Get chart type - Chart.js v3+ uses config.type
+                const chartType = originalChart.config?.type || originalChart.type || 'bar';
+                // Get plugins from config or use empty array
+                const originalPlugins = originalChart.config?.plugins || [];
                 
                 // Create new chart instance for fullscreen with enhanced options
                 window.fullscreenChartInstance = new Chart(ctx, {
-                    type: originalChart.config.type,
+                    type: chartType,
                     data: {
                         labels: originalData.labels,
                         datasets: originalData.datasets.map(dataset => {
                             const enhancedDataset = { ...dataset };
                             
                             // Enhance different chart types appropriately
-                            if (originalChart.config.type === 'line') {
+                            if (chartType === 'line') {
                                 enhancedDataset.pointRadius = dataset.pointRadius ? dataset.pointRadius * 1.5 : 6;
                                 enhancedDataset.pointHoverRadius = dataset.pointHoverRadius ? dataset.pointHoverRadius * 1.5 : 8;
                                 enhancedDataset.borderWidth = dataset.borderWidth ? dataset.borderWidth * 1.5 : 3;
-                            } else if (originalChart.config.type === 'bar') {
+                            } else if (chartType === 'bar') {
                                 enhancedDataset.borderWidth = dataset.borderWidth ? dataset.borderWidth * 1.5 : 2;
                                 enhancedDataset.borderRadius = dataset.borderRadius ? dataset.borderRadius * 1.5 : 6;
                             }
@@ -1582,7 +1595,7 @@ if (window.history.replaceState) {
                             return enhancedDataset;
                         })
                     },
-                    plugins: originalChart.config.plugins,
+                    plugins: originalPlugins,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
@@ -1607,7 +1620,7 @@ if (window.history.replaceState) {
                                 bodyFont: {
                                     size: 14
                                 },
-                                callbacks: originalChart.options.plugins.tooltip.callbacks
+                                callbacks: originalChart.options?.plugins?.tooltip?.callbacks || {}
                             },
                             datalabels: {
                                 display: function(context) {
@@ -1671,24 +1684,27 @@ if (window.history.replaceState) {
                                 }
                             }
                         },
-                        scales: originalChart.options.scales ? {
+                        indexAxis: originalChart.options?.indexAxis || undefined,
+                        scales: originalChart.options?.scales ? {
                             ...originalChart.options.scales,
-                            x: {
+                            x: originalChart.options.scales.x ? {
                                 ...originalChart.options.scales.x,
                                 grid: {
+                                    ...originalChart.options.scales.x.grid,
                                     color: '#334155'
                                 },
                                 ticks: {
-                                    ...originalChart.options.scales.x?.ticks,
+                                    ...originalChart.options.scales.x.ticks,
                                     color: '#94a3b8',
                                     font: {
                                         size: 14
                                     }
                                 }
-                            },
+                            } : undefined,
                             y: originalChart.options.scales.y ? {
                                 ...originalChart.options.scales.y,
                                 grid: {
+                                    ...originalChart.options.scales.y.grid,
                                     color: '#334155'
                                 },
                                 ticks: {
@@ -1770,6 +1786,7 @@ if (window.history.replaceState) {
         const chartInstances = {
             'timeSeriesChart': window.timeSeriesChartInstance,
             'stateChart': window.stateChartInstance,
+            'statePendingChart': window.statePendingChartInstance,
             'topCitiesCollectionChart': window.topCitiesCollectionChartInstance,
             'pendingCasesByAmountChart': window.pendingCasesByAmountChartInstance,
             'fraudStateChart': window.fraudStateChartInstance,
@@ -2032,7 +2049,7 @@ async function loadTopCitiesCollectionChart(filterParams = null) {
                     }
                 }
             },
-            plugins: [ChartDataLabels]
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
         });
         
     } catch (error) {
@@ -2323,7 +2340,7 @@ async function loadPendingCasesByAmountChart(filterParams = null) {
                     }
                 }
             },
-            plugins: [ChartDataLabels]
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
         });
         
     } catch (error) {
@@ -3126,9 +3143,18 @@ async function loadDailyPerformanceData(silentRefresh = false) {
             if (mainContentEl) mainContentEl.classList.remove('hidden');
         }
         
-        // Update position date
-        if (data.position_as_on) {
-            document.getElementById('positionDate').textContent = data.position_as_on;
+        // Update position date - always use today's date (local timezone)
+        const positionDateEl = document.getElementById('positionDate');
+        if (positionDateEl) {
+            const today = new Date();
+            // Get local date components to avoid timezone issues
+            const day = String(today.getDate()).padStart(2, '0');
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = monthNames[today.getMonth()];
+            const year = String(today.getFullYear()).slice(-2); // Last 2 digits of year
+            const formattedDate = `${day}-${month}-${year}`;
+            // Always use today's date, ignore API date
+            positionDateEl.textContent = formattedDate;
         }
         
         // Update Sanction Performance section
@@ -3596,6 +3622,545 @@ function formatCurrencyForExcel(amount) {
     const numStr = amount.toString().replace(/,/g, '');
     const num = parseFloat(numStr);
     return formatNumberWithCommas(num);
+}
+
+// Function to export AUM Report to Excel with styling matching the image format
+async function exportAumReport() {
+    try {
+        console.log('Export AUM Report function called');
+        
+        // Check if ExcelJS is loaded, if not load it
+        if (typeof ExcelJS === 'undefined') {
+            console.log('ExcelJS not loaded, loading it now...');
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+            script.onload = () => {
+                console.log('ExcelJS loaded, retrying export...');
+                exportAumReport();
+            };
+            script.onerror = () => {
+                console.error('Failed to load ExcelJS');
+                alert('Failed to load Excel library. Please check your internet connection.');
+            };
+            document.head.appendChild(script);
+            return;
+        }
+        
+        console.log('ExcelJS is available');
+        
+        // Get current data from stored global variable or fetch fresh
+        let data = window.aumReportData;
+        console.log('Current AUM data:', data);
+        
+        if (!data || !data.monthly_data || data.monthly_data.length === 0) {
+            console.log('No data in memory, fetching from API...');
+            const response = await fetch('/api/aum-report/');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch data: ${response.status} ${response.statusText}`);
+            }
+            const responseData = await response.json();
+            console.log('Fetched data:', responseData);
+            data = {
+                monthly_data: responseData.monthly_data || [],
+                total_data: responseData.total_data || null
+            };
+        }
+        
+        if (!data.monthly_data || data.monthly_data.length === 0) {
+            alert('No data to export');
+            return;
+        }
+        
+        console.log('Starting Excel generation with', data.monthly_data.length, 'months of data');
+        
+        // Create workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('AUM Report');
+        
+        // Helper function to format month label
+        function getMonthLabel(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const month = date.toLocaleDateString('en-US', { month: 'short' });
+            const year = date.getFullYear().toString().slice(-2);
+            return `${month}-${year}`;
+        }
+        
+        // Helper function to format numbers
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(parseFloat(num))) return '';
+            const floatNum = parseFloat(num);
+            if (floatNum === 0) return '0';
+            return floatNum.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        }
+        
+        // Helper function to format percentages
+        function formatPercent(value) {
+            if (value === null || value === undefined || isNaN(parseFloat(value))) return '';
+            return parseFloat(value).toFixed(2) + '%';
+        }
+        
+        // Define colors - Professional theme
+        const headerBlue = { argb: 'FF2E75B6' }; // Professional blue for headers
+        const headerBlueDark = { argb: 'FF1F4E79' }; // Darker blue for sub-headers
+        const yellowBg = { argb: 'FFFFF9C4' }; // Soft yellow background
+        const yellowText = { argb: 'FF7D6608' }; // Dark yellow text
+        const whiteBg = { argb: 'FFFFFFFF' }; // White background
+        const darkText = { argb: 'FF212121' }; // Dark gray text (softer than black)
+        const lightGrayBg = { argb: 'FFF8F9FA' }; // Very light gray for alternating columns
+        const headerText = { argb: 'FFFFFFFF' }; // White text for headers
+        const borderColor = { argb: 'FFCCCCCC' }; // Light gray borders
+        const borderColorDark = { argb: 'FF999999' }; // Medium gray for header borders
+        
+        // Set column widths
+        worksheet.getColumn(1).width = 38; // Category column - slightly wider
+        // Set data column widths
+        for (let i = 2; i <= 1 + (data.monthly_data.length * 2); i++) {
+            worksheet.getColumn(i).width = 12; // Consistent width for data columns
+        }
+        
+        // Create header row with "Aum Report" title
+        const titleRow = worksheet.addRow(['AUM REPORT']);
+        titleRow.getCell(1).font = { bold: true, size: 16, color: headerText, name: 'Calibri' };
+        titleRow.getCell(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: headerBlue
+        };
+        titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.mergeCells(1, 1, 1, 1 + (data.monthly_data.length * 2));
+        titleRow.height = 35;
+        titleRow.getCell(1).border = {
+            top: { style: 'medium', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
+        };
+        
+        // Add empty row
+        const emptyRow = worksheet.addRow([]);
+        emptyRow.height = 5;
+        
+        // Create main header row with months
+        const headerRow = worksheet.addRow(['']);
+        headerRow.getCell(1).value = 'Category';
+        headerRow.getCell(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: headerBlue
+        };
+        headerRow.getCell(1).font = { bold: true, size: 12, color: headerText, name: 'Calibri' };
+        headerRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        headerRow.getCell(1).border = {
+            top: { style: 'medium', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
+        };
+        
+        let colIndex = 2;
+        data.monthly_data.forEach((item, index) => {
+            const monthLabel = getMonthLabel(item.month);
+            const isLast = index === data.monthly_data.length - 1;
+            
+            // Merge cells for month header
+            worksheet.mergeCells(3, colIndex, 3, colIndex + 1);
+            const monthCell = headerRow.getCell(colIndex);
+            monthCell.value = monthLabel;
+            monthCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: headerBlue
+            };
+            monthCell.font = { bold: true, size: 12, color: headerText, name: 'Calibri' };
+            monthCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            monthCell.border = {
+                top: { style: 'medium', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: isLast ? 'medium' : 'medium', color: borderColorDark }
+            };
+            
+            colIndex += 2;
+        });
+        
+        headerRow.height = 28;
+        
+        // Create sub-header row for Units/Sum
+        const subHeaderRow = worksheet.addRow(['']);
+        subHeaderRow.getCell(1).value = '';
+        subHeaderRow.getCell(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: headerBlueDark // Darker blue for sub-header
+        };
+        subHeaderRow.getCell(1).font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
+        subHeaderRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        subHeaderRow.getCell(1).border = {
+            top: { style: 'thin', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
+        };
+        
+        colIndex = 2;
+        data.monthly_data.forEach((item, index) => {
+            const isLast = index === data.monthly_data.length - 1;
+            const colBg = headerBlueDark; // Consistent dark blue for sub-header
+            
+            // Units column
+            const unitsCell = subHeaderRow.getCell(colIndex);
+            unitsCell.value = 'Units';
+            unitsCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: colBg
+            };
+            unitsCell.font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
+            unitsCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            unitsCell.border = {
+                top: { style: 'thin', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: 'thin', color: borderColorDark }
+            };
+            
+            // Sum column
+            const sumCell = subHeaderRow.getCell(colIndex + 1);
+            sumCell.value = 'Sum';
+            sumCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: colBg
+            };
+            sumCell.font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
+            sumCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            sumCell.border = {
+                top: { style: 'thin', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'thin', color: borderColorDark },
+                right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
+            };
+            
+            colIndex += 2;
+        });
+        
+        subHeaderRow.height = 22;
+        
+        // Helper function to create a data row
+        function addDataRow(categoryLabel, isBold = false, isIndented = false, isYellow = false, isTotal = false) {
+            const row = worksheet.addRow(['']);
+            const categoryCell = row.getCell(1);
+            categoryCell.value = categoryLabel;
+            categoryCell.font = {
+                bold: isBold,
+                size: isTotal ? 12 : 11,
+                color: isYellow ? yellowText : darkText,
+                name: 'Calibri'
+            };
+            categoryCell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: isYellow ? yellowBg : whiteBg
+            };
+            categoryCell.alignment = { 
+                horizontal: isIndented ? 'left' : 'left', 
+                vertical: 'middle',
+                indent: isIndented ? 1 : 0,
+                wrapText: true
+            };
+            categoryCell.border = {
+                top: { style: 'thin', color: borderColor },
+                bottom: { style: 'thin', color: borderColor },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: 'thin', color: borderColor }
+            };
+            row.height = isTotal ? 22 : 18;
+            
+            return row;
+        }
+        
+        // Helper function to add data cells
+        function addDataCells(row, getValue, isYellow = false, isTotal = false, formatter = formatNumber, allowDecimals = false) {
+            let colIndex = 2;
+            data.monthly_data.forEach((item, index) => {
+                const isLast = index === data.monthly_data.length - 1;
+                const colBg = index % 2 === 0 ? whiteBg : lightGrayBg;
+                const cellBg = isYellow ? yellowBg : colBg;
+                
+                const value = getValue(item);
+                // Determine if this is a percentage formatter
+                const isPercent = formatter === formatPercent;
+                
+                if (Array.isArray(value)) {
+                    // Two values (Units and Sum)
+                    const unitsCell = row.getCell(colIndex);
+                    const unitsNum = parseFloat(value[0]) || 0;
+                    unitsCell.value = unitsNum; // Set numeric value
+                    unitsCell.numFmt = '#,##0'; // Excel number format with thousand separators
+                    unitsCell.font = {
+                        bold: isTotal,
+                        size: isTotal ? 12 : 11,
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
+                    };
+                    unitsCell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: cellBg
+                    };
+                    unitsCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    unitsCell.border = {
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: 'thin', color: borderColor }
+                    };
+                    
+                    const sumCell = row.getCell(colIndex + 1);
+                    const sumNum = parseFloat(value[1]) || 0;
+                    sumCell.value = sumNum; // Set numeric value
+                    sumCell.numFmt = '#,##0'; // Excel number format with thousand separators
+                    sumCell.font = {
+                        bold: isTotal,
+                        size: isTotal ? 12 : 11,
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
+                    };
+                    sumCell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: cellBg
+                    };
+                    sumCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    sumCell.border = {
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
+                    };
+                } else {
+                    // Single value (spans two columns)
+                    worksheet.mergeCells(row.number, colIndex, row.number, colIndex + 1);
+                    const cell = row.getCell(colIndex);
+                    let numValue = parseFloat(value) || 0;
+                    if (isPercent) {
+                        // If value is > 1, it's likely a percentage (0-100), convert to decimal (0-1) for Excel
+                        if (numValue > 1) {
+                            numValue = numValue / 100;
+                        }
+                        cell.value = numValue; // Set numeric value
+                        cell.numFmt = '0.00%'; // Excel percentage format
+                    } else {
+                        cell.value = numValue; // Set numeric value
+                        if (allowDecimals) {
+                            cell.numFmt = '#,##0.00'; // Excel number format with thousand separators and 2 decimals
+                        } else {
+                            cell.numFmt = '#,##0'; // Excel number format with thousand separators
+                        }
+                    }
+                    cell.font = {
+                        bold: isTotal,
+                        size: isTotal ? 12 : 11,
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
+                    };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: cellBg
+                    };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = {
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
+                    };
+                }
+                
+                colIndex += 2;
+            });
+        }
+        
+        // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - NEW
+        let row = addDataRow('STPL (SHORT TERM PERSONAL LOAN)', true, false, false, false);
+        addDataCells(row, (item) => [item.new_units || 0, item.new_sum || 0]);
+        
+        // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - REPEAT
+        row = addDataRow('Loan Disbursed - REPEAT', false, true, false, false);
+        addDataCells(row, (item) => [item.repeat_units || 0, item.repeat_sum || 0]);
+        
+        // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - Total
+        row = addDataRow('Loan Disbursed - Total', true, true, false, false);
+        addDataCells(row, (item) => [item.total_units || 0, item.total_sum || 0]);
+        
+        // ATS
+        row = addDataRow('ATS', true, false, false, false);
+        addDataCells(row, (item) => item.ats || 0, false, false, formatNumber, true);
+        
+        // Running Cases (main category for overdue cases)
+        row = addDataRow('Running Cases', true, false, false, false);
+        addDataCells(row, (item) => [item.running_units || 0, item.running_sum || 0]);
+        
+        // Over Due +1-30 Day
+        row = addDataRow('Over Due +1-30 Day', false, true, false, false);
+        addDataCells(row, (item) => [item.od_1_30_units || 0, item.od_1_30_sum || 0]);
+        
+        // Over Due +31-90 Day
+        row = addDataRow('Over Due +31-90 Day', false, true, false, false);
+        addDataCells(row, (item) => [item.od_31_90_units || 0, item.od_31_90_sum || 0]);
+        
+        // Over Due 90+ Day
+        row = addDataRow('Over Due 90+ Day', false, true, false, false);
+        addDataCells(row, (item) => [item.od_90p_units || 0, item.od_90p_sum || 0]);
+        
+        // Loan Book(AUM) - Yellow highlighted
+        row = addDataRow('Loan Book(AUM)', true, false, true, false);
+        addDataCells(row, (item) => {
+            const aumUnits = item.running_units || 0;
+            const aumSum = item.running_sum || 0;
+            return [aumUnits, aumSum];
+        }, true);
+        
+        // 1+DPD% (main category for DPD Percentages)
+        row = addDataRow('1+DPD%', true, false, false, false);
+        addDataCells(row, (item) => item.dpd_1_30_count_percent || 0, false, false, formatPercent);
+        
+        // 30+DPD%
+        row = addDataRow('30+DPD%', false, true, false, false);
+        addDataCells(row, (item) => item.dpd_31_90_count_percent || 0, false, false, formatPercent);
+        
+        // 90+DPD%
+        row = addDataRow('90+DPD%', false, true, false, false);
+        addDataCells(row, (item) => item.dpd_90p_count_percent || 0, false, false, formatPercent);
+        
+        // Income/Financials - PF Income (Incl. GST)
+        row = addDataRow('PF Income (Incl. GST)', true, false, false, false);
+        addDataCells(row, (item) => item.total_pf || 0, false, false, formatNumber);
+        
+        // Interest Income
+        row = addDataRow('Interest Income', false, true, false, false);
+        addDataCells(row, (item) => item.interest_amount || 0, false, false, formatNumber);
+        
+        // Avg PF (Incl. GST)
+        row = addDataRow('Avg PF (Incl. GST)', false, true, false, false);
+        addDataCells(row, (item) => item.avg_pf || 0, false, false, formatNumber, true);
+        
+        // Avg ROI
+        row = addDataRow('Avg ROI', false, true, false, false);
+        addDataCells(row, (item) => item.avg_roi || 0, false, false, formatPercent);
+        
+        // Avg Tenure
+        row = addDataRow('Avg Tenure', false, true, false, false);
+        addDataCells(row, (item) => item.avg_tenure || 0, false, false, formatNumber, true);
+        
+        // Total Loan Book Aum - Yellow highlighted (spans all columns)
+        if (data.total_data) {
+            // Check for aum_sum first, then running_sum as fallback
+            const totalValue = data.total_data.running_sum || null;
+            if (totalValue !== null && totalValue !== undefined) {
+                row = worksheet.addRow(['']);
+                row.height = 24;
+                const categoryCell = row.getCell(1);
+                categoryCell.value = 'Total Loan Book AUM';
+                categoryCell.font = { bold: true, size: 12, color: yellowText, name: 'Calibri' };
+                categoryCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: yellowBg
+                };
+                categoryCell.alignment = { horizontal: 'left', vertical: 'middle' };
+                categoryCell.border = {
+                    top: { style: 'medium', color: borderColorDark },
+                    bottom: { style: 'medium', color: borderColorDark },
+                    left: { style: 'medium', color: borderColorDark },
+                    right: { style: 'thin', color: borderColor }
+                };
+                
+                // Merge remaining cells for the total value
+                worksheet.mergeCells(row.number, 2, row.number, 1 + (data.monthly_data.length * 2));
+                const totalCell = row.getCell(2);
+                const totalNum = parseFloat(totalValue) || 0;
+                totalCell.value = totalNum; // Set numeric value
+                totalCell.numFmt = '#,##0'; // Excel number format with thousand separators
+                totalCell.font = { bold: true, size: 12, color: yellowText, name: 'Calibri' };
+                totalCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: yellowBg
+                };
+                totalCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                totalCell.border = {
+                    top: { style: 'medium', color: borderColorDark },
+                    bottom: { style: 'medium', color: borderColorDark },
+                    left: { style: 'thin', color: borderColor },
+                    right: { style: 'medium', color: borderColorDark }
+                };
+            }
+        }
+        
+        // Generate Excel file
+        console.log('Generating Excel buffer...');
+        const buffer = await workbook.xlsx.writeBuffer();
+        console.log('Excel buffer generated, size:', buffer.byteLength);
+        
+        // Determine the date for filename based on active button
+        let reportDate = new Date().toISOString().split('T')[0]; // Default to today
+        
+        const tillDateBtn = document.getElementById('aumTillDateBtn');
+        const tillPrevDateBtn = document.getElementById('aumTillPrevDateBtn');
+        const tillPrevMonthBtn = document.getElementById('aumTillPrevMonthBtn');
+        
+        // Check which button is active
+        const isTillDateActive = tillDateBtn && tillDateBtn.classList.contains('ring-2');
+        const isTillPrevDateActive = tillPrevDateBtn && tillPrevDateBtn.classList.contains('ring-2');
+        const isTillPrevMonthActive = tillPrevMonthBtn && tillPrevMonthBtn.classList.contains('ring-2');
+        
+        if (isTillPrevDateActive) {
+            // Use previous date (yesterday)
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            reportDate = yesterday.toISOString().split('T')[0];
+        } else if (isTillPrevMonthActive) {
+            // Use last day of previous month
+            const today = new Date();
+            // Get the last day of the previous month by using day 0 of current month
+            // new Date(year, month, 0) gives the last day of the previous month
+            const prevMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            // Format date manually to avoid timezone issues
+            const year = prevMonth.getFullYear();
+            const month = String(prevMonth.getMonth() + 1).padStart(2, '0');
+            const day = String(prevMonth.getDate()).padStart(2, '0');
+            reportDate = `${year}-${month}-${day}`;
+        }
+        // If tillDate is active or no button is active, use today's date (default)
+        
+        // Get current date and time for filename
+        const now = new Date();
+        const downloadDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const downloadTime = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+        const downloadDateTime = `${downloadDate}_${downloadTime}`;
+        
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `AUM_Report_${reportDate}_Downloaded_${downloadDateTime}.xlsx`;
+        document.body.appendChild(a);
+        console.log('Triggering download...');
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log('AUM Report exported successfully');
+    } catch (error) {
+        console.error('Error exporting AUM report:', error);
+        console.error('Error stack:', error.stack);
+        alert('Failed to export AUM report: ' + error.message + '\n\nPlease check the browser console for more details.');
+    }
 }
 
 // Function to save monthly target
@@ -4230,6 +4795,12 @@ function setupAutoRefresh() {
             } else if (activeTab === 'creditPerson') {
                 await loadCreditPersonData();
                 console.log('Credit Person Wise tab data refreshed successfully');
+            } else if (activeTab === 'aumReport') {
+                // Refresh AUM Report tab (silent refresh - no loading screen)
+                // Get current active button state to maintain filter
+                const tillDate = getAumCurrentTillDate();
+                await loadAumData(true, tillDate);
+                console.log('AUM Report tab data refreshed successfully');
             }
             
         } catch (error) {
@@ -4273,7 +4844,14 @@ async function refreshKPIData(params) {
             // Update Fresh Percentage
             const freshPercentageElement = document.getElementById('freshPercentage');
             if (freshPercentageElement) {
-                freshPercentageElement.textContent = kpis.fresh_percentage.toFixed(1);
+                const freshPct = kpis.fresh_percentage;
+                // Convert to number if it's a string
+                const freshPctNum = typeof freshPct === 'string' ? parseFloat(freshPct) : freshPct;
+                if (freshPctNum !== undefined && freshPctNum !== null && !isNaN(freshPctNum)) {
+                    freshPercentageElement.textContent = freshPctNum.toFixed(1);
+                } else {
+                    freshPercentageElement.textContent = '0.0';
+                }
             }
             
             // Update Reloan Cases
@@ -4285,7 +4863,14 @@ async function refreshKPIData(params) {
             // Update Reloan Percentage
             const reloanPercentageElement = document.getElementById('reloanPercentage');
             if (reloanPercentageElement) {
-                reloanPercentageElement.textContent = kpis.reloan_percentage.toFixed(1);
+                const reloanPct = kpis.reloan_percentage;
+                // Convert to number if it's a string
+                const reloanPctNum = typeof reloanPct === 'string' ? parseFloat(reloanPct) : reloanPct;
+                if (reloanPctNum !== undefined && reloanPctNum !== null && !isNaN(reloanPctNum)) {
+                    reloanPercentageElement.textContent = reloanPctNum.toFixed(1);
+                } else {
+                    reloanPercentageElement.textContent = '0.0';
+                }
             }
             
             // Update Sanction Amount
@@ -4352,7 +4937,14 @@ async function refreshKPIData(params) {
             // Update Collected Percentage
             const collectedPercentageElement = document.getElementById('collectedPercentage');
             if (collectedPercentageElement) {
-                collectedPercentageElement.textContent = kpis.collected_percentage.toFixed(2) + '% of Repayment';
+                const collectedPct = kpis.collected_percentage;
+                // Convert to number if it's a string
+                const collectedPctNum = typeof collectedPct === 'string' ? parseFloat(collectedPct) : collectedPct;
+                if (collectedPctNum !== undefined && collectedPctNum !== null && !isNaN(collectedPctNum)) {
+                    collectedPercentageElement.textContent = collectedPctNum.toFixed(2) + '% of Repayment';
+                } else {
+                    collectedPercentageElement.textContent = '0.00% of Repayment';
+                }
             }
             
             // Update Fresh Collected Amount
@@ -4376,7 +4968,14 @@ async function refreshKPIData(params) {
             // Update Pending Percentage
             const pendingPercentageElement = document.getElementById('pendingPercentage');
             if (pendingPercentageElement) {
-                pendingPercentageElement.textContent = kpis.pending_percentage.toFixed(2) + '% of Repayment';
+                const pendingPct = kpis.pending_percentage;
+                // Convert to number if it's a string
+                const pendingPctNum = typeof pendingPct === 'string' ? parseFloat(pendingPct) : pendingPct;
+                if (pendingPctNum !== undefined && pendingPctNum !== null && !isNaN(pendingPctNum)) {
+                    pendingPercentageElement.textContent = pendingPctNum.toFixed(2) + '% of Repayment';
+                } else {
+                    pendingPercentageElement.textContent = '0.00% of Repayment';
+                }
             }
             
             // Update Fresh Pending Amount
@@ -4595,6 +5194,9 @@ async function loadStateRepaymentChart(filterParams = null) {
                                 return 'Collected: ' + formatCurrency(context.parsed.y);
                             }
                         }
+                    },
+                    datalabels: {
+                        display: false
                     }
                 },
                 scales: {
@@ -4662,6 +5264,9 @@ async function loadStatePendingChart(filterParams = null) {
                                 return 'Pending: ' + formatCurrency(context.parsed.y);
                             }
                         }
+                    },
+                    datalabels: {
+                        display: false
                     }
                 },
                 scales: {
@@ -4763,7 +5368,18 @@ async function loadTimeSeriesChart(filterParams = null) {
             pendingCasesPercentElement.textContent = pendingPercent + '% of Total';
         }
         
-        const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+        // Check if the canvas element exists before trying to access it
+        const timeSeriesCanvas = document.getElementById('timeSeriesChart');
+        if (!timeSeriesCanvas) {
+            console.warn('Time series chart canvas not found, skipping chart creation');
+            return;
+        }
+        
+        const ctx = timeSeriesCanvas.getContext('2d');
+        if (!ctx) {
+            console.error('Could not get 2d context from time series chart canvas');
+            return;
+        }
         
         // Destroy existing chart if it exists
         if (window.timeSeriesChartInstance) {
@@ -4815,7 +5431,7 @@ async function loadTimeSeriesChart(filterParams = null) {
                     }
                 ]
             },
-            plugins: [ChartDataLabels],
+            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -4893,7 +5509,12 @@ async function loadTimeSeriesChart(filterParams = null) {
     } catch (error) {
         console.error('Error loading time series chart:', error);
         // Show error message in the chart container
-        const chartContainer = document.getElementById('timeSeriesChart').parentElement;
+        const timeSeriesChartEl = document.getElementById('timeSeriesChart');
+        if (!timeSeriesChartEl || !timeSeriesChartEl.parentElement) {
+            console.warn('Time series chart container not found');
+            return;
+        }
+        const chartContainer = timeSeriesChartEl.parentElement;
         chartContainer.innerHTML = '<div class="flex items-center justify-center h-80 text-red-500">Error loading chart: ' + error.message + '</div>';
     }
 }
@@ -4974,6 +5595,122 @@ function populateCollectionOverTimeTable(timeSeriesData) {
     `;
 
     tbody.appendChild(totalsRow);
+}
+
+// Load lowest collection dates by month
+async function loadLowestCollectionDates(filterParams = null) {
+    const loadingEl = document.getElementById('lowestCollectionDatesLoading');
+    const tableEl = document.getElementById('lowestCollectionDatesTable');
+    const tbodyEl = document.getElementById('lowestCollectionDatesTableBody');
+    const emptyEl = document.getElementById('lowestCollectionDatesEmpty');
+    const errorEl = document.getElementById('lowestCollectionDatesError');
+    const errorMessageEl = document.getElementById('lowestCollectionDatesErrorMessage');
+    
+    try {
+        // Show loading state
+        if (loadingEl) loadingEl.classList.remove('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.add('hidden');
+        
+        // Get filter parameters
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
+        
+        // Fetch data from API
+        const response = await fetch(`/api/fraud/lowest-collection-dates/?${params}`);
+        if (!response.ok) {
+            throw new Error(`API responded with status ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        const monthlyData = data.data || [];
+        
+        // Hide loading state
+        if (loadingEl) loadingEl.classList.add('hidden');
+        
+        if (!monthlyData || monthlyData.length === 0) {
+            // Show empty state
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            if (tableEl) tableEl.classList.add('hidden');
+            return;
+        }
+        
+        // Show table and populate data
+        if (tableEl) tableEl.classList.remove('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (tbodyEl) {
+            tbodyEl.innerHTML = '';
+            
+            monthlyData.forEach(monthData => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-800 hover:bg-gray-800/30 transition-colors';
+                
+                // Format month name
+                const monthDate = new Date(monthData.month + '-01');
+                const monthName = monthDate.toLocaleDateString('en-IN', { 
+                    month: 'long', 
+                    year: 'numeric' 
+                });
+                
+                // Format dates
+                const datesList = monthData.lowest_dates.map(dateInfo => {
+                    const date = new Date(dateInfo.date);
+                    return date.toLocaleDateString('en-IN', { 
+                        day: 'numeric', 
+                        month: 'short' 
+                    });
+                }).join(', ');
+                
+                // Calculate total repayment and collected amounts for all lowest dates
+                const totalRepayment = monthData.lowest_dates.reduce((sum, d) => sum + d.repayment_amount, 0);
+                const totalCollected = monthData.lowest_dates.reduce((sum, d) => sum + d.collected_amount, 0);
+                
+                // Color code collection rate
+                let rateColorClass = 'text-red-400';
+                if (monthData.lowest_collection_rate >= 80) {
+                    rateColorClass = 'text-green-400';
+                } else if (monthData.lowest_collection_rate >= 60) {
+                    rateColorClass = 'text-yellow-400';
+                }
+                
+                row.innerHTML = `
+                    <td class="py-3 px-4 text-white font-medium">${monthName}</td>
+                    <td class="py-3 px-4 text-right ${rateColorClass} font-semibold">${monthData.lowest_collection_rate.toFixed(2)}%</td>
+                    <td class="py-3 px-4 text-gray-300">${datesList}</td>
+                    <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(totalRepayment)}</td>
+                    <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(totalCollected)}</td>
+                `;
+                
+                tbodyEl.appendChild(row);
+            });
+        }
+        
+        console.log('Lowest collection dates loaded:', monthlyData.length, 'months');
+        
+    } catch (error) {
+        console.error('Error loading lowest collection dates:', error);
+        
+        // Hide loading state
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        
+        // Show error state
+        if (errorEl) errorEl.classList.remove('hidden');
+        if (errorMessageEl) {
+            errorMessageEl.textContent = error.message || 'Failed to load data. Please try again later.';
+        }
+    }
 }
 
 // ===============================
@@ -5864,10 +6601,155 @@ function renderCreditPersonChart(data) {
     });
 }
 
-function renderCreditPersonTable(data) {
+// Global variable to track sort state for Credit Person table
+let creditPersonSortState = {
+    column: null,
+    direction: null // 'asc' or 'desc'
+};
+
+// Store original data for sorting
+let creditPersonTableData = [];
+
+// Reset sort indicators
+function resetCreditPersonSortIndicators() {
+    const sortIndicators = document.querySelectorAll('.sort-indicator');
+    sortIndicators.forEach(indicator => {
+        indicator.classList.remove('active', 'asc', 'desc');
+    });
+    creditPersonSortState.column = null;
+    creditPersonSortState.direction = null;
+}
+
+// CSS for sort indicators
+if (!document.getElementById('creditPersonSortStyle')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'creditPersonSortStyle';
+    styleEl.textContent = `
+        .sort-indicator {
+            font-size: 0.75rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            display: inline-block;
+            min-width: 1rem;
+        }
+        .sort-indicator.active {
+            opacity: 1;
+            color: #60a5fa;
+        }
+        .sort-indicator.active {
+            font-size: 0;
+        }
+        .sort-indicator.asc::after {
+            content: '↑';
+            font-size: 0.75rem;
+        }
+        .sort-indicator.desc::after {
+            content: '↓';
+            font-size: 0.75rem;
+        }
+    `;
+    document.head.appendChild(styleEl);
+}
+
+function sortCreditPersonTable(column) {
+    if (!creditPersonTableData || creditPersonTableData.length === 0) {
+        return;
+    }
+
+    // Toggle sort direction if clicking the same column
+    if (creditPersonSortState.column === column) {
+        creditPersonSortState.direction = creditPersonSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        creditPersonSortState.column = column;
+        creditPersonSortState.direction = 'desc'; // Default to highest first
+    }
+
+    // Reset all sort indicators
+    const sortIndicators = document.querySelectorAll('.sort-indicator');
+    sortIndicators.forEach(indicator => {
+        indicator.classList.remove('active', 'asc', 'desc');
+    });
+
+    // Update active sort indicator
+    const indicatorMap = {
+        'loans': 'sortLoans',
+        'recovered': 'sortRecovered',
+        'notRecovered': 'sortNotRecovered',
+        'recoveryRate': 'sortRecoveryRate',
+        'loanAmount': 'sortLoanAmount',
+        'repaymentAmount': 'sortRepaymentAmount',
+        'receivedAmount': 'sortReceivedAmount',
+        'pendingAmount': 'sortPendingAmount'
+    };
+    const activeIndicator = document.getElementById(indicatorMap[column]);
+    if (activeIndicator) {
+        activeIndicator.classList.add('active', creditPersonSortState.direction);
+    }
+
+    // Sort the data
+    const sortedData = [...creditPersonTableData].sort((a, b) => {
+        let valueA, valueB;
+
+        switch(column) {
+            case 'loans':
+                valueA = a.totalLoans;
+                valueB = b.totalLoans;
+                break;
+            case 'recovered':
+                valueA = a.recoveredLoans;
+                valueB = b.recoveredLoans;
+                break;
+            case 'notRecovered':
+                valueA = a.notRecoveredLoans;
+                valueB = b.notRecoveredLoans;
+                break;
+            case 'recoveryRate':
+                valueA = a.recoveryRate || 0;
+                valueB = b.recoveryRate || 0;
+                break;
+            case 'loanAmount':
+                valueA = a.loanAmount || 0;
+                valueB = b.loanAmount || 0;
+                break;
+            case 'repaymentAmount':
+                valueA = a.repaymentAmount || 0;
+                valueB = b.repaymentAmount || 0;
+                break;
+            case 'receivedAmount':
+                valueA = a.receivedAmount || 0;
+                valueB = b.receivedAmount || 0;
+                break;
+            case 'pendingAmount':
+                valueA = a.pendingAmount || 0;
+                valueB = b.pendingAmount || 0;
+                break;
+            default:
+                return 0;
+        }
+
+        if (creditPersonSortState.direction === 'asc') {
+            return valueA - valueB;
+        } else {
+            return valueB - valueA;
+        }
+    });
+
+    // Re-render table with sorted data
+    renderCreditPersonTable(sortedData, true);
+}
+
+function renderCreditPersonTable(data, isSorted = false) {
     const tbody = document.getElementById('creditPersonTableBody');
     if (!tbody) {
         return;
+    }
+
+    // Store data for sorting
+    creditPersonTableData = data;
+
+    // Reset sort indicators if this is fresh data (not a sort operation)
+    if (!isSorted) {
+        resetCreditPersonSortIndicators();
     }
 
     tbody.innerHTML = '';
@@ -6609,6 +7491,9 @@ function updateDisbursalStateChart(stateData) {
                             return `${label}: ${formatCurrency(value)} (${percentage}%)`;
                         }
                     }
+                },
+                datalabels: {
+                    display: false
                 }
             }
         }
@@ -6694,6 +7579,9 @@ function updateDisbursalCityChart(cityData) {
                             return `${label}: ${formatCurrency(value)} (${percentage}%)`;
                         }
                     }
+                },
+                datalabels: {
+                    display: false
                 }
             }
         }
@@ -6842,6 +7730,451 @@ function switchTab(tabName) {
         }, 150);
     }
     
+    // Initialize AUM Report tab if it's being switched to
+    if (tabName === 'aumReport') {
+        console.log('Switching to AUM Report tab, loading data...');
+        loadAumDataTillDate(); // Default to till date
+        
+        // Export button uses inline onclick handler, no need for additional event listener
+    }
+}
+
+// AUM Report Functions
+async function loadAumData(silentRefresh = false, tillDate = null) {
+    try {
+        // Show loading state only on initial load, not during auto-refresh
+        const loadingEl = document.getElementById('aumLoading');
+        const tableEl = document.getElementById('aumTableContainer');
+        const errorEl = document.getElementById('aumError');
+        
+        if (!silentRefresh) {
+        if (loadingEl) loadingEl.classList.remove('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        }
+        if (errorEl) errorEl.classList.add('hidden');
+        
+        // Build API URL with optional parameters
+        let apiUrl = '/api/aum-report/';
+        if (tillDate === 'prev_date') {
+            // Use till previous date endpoint
+            apiUrl += `?till_prev_date=true`;
+        } else if (tillDate === 'prev_month') {
+            // Use till previous month endpoint
+            apiUrl += `?till_prev_month=true`;
+        }
+        // If tillDate is null, use default endpoint (till current date)
+        
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Debug logging
+        console.log('AUM Report API Response:', data);
+        console.log('Total Data:', data.total_data);
+        if (data.total_data) {
+            console.log('Total Data keys:', Object.keys(data.total_data));
+            console.log('Total Data aum_sum:', data.total_data.aum_sum);
+            console.log('Total Data running_sum:', data.total_data.running_sum);
+        }
+        
+        // Hide loading only if it was shown
+        if (!silentRefresh && loadingEl) loadingEl.classList.add('hidden');
+        
+        // Check if we have monthly data (the API doesn't return a 'success' field)
+        if (!data.monthly_data || data.monthly_data.length === 0) {
+            if (!silentRefresh) {
+            if (errorEl) {
+                errorEl.classList.remove('hidden');
+                document.getElementById('aumErrorMessage').textContent = 'No data available';
+                }
+            }
+            return;
+        }
+        
+        // Store data globally for Excel export
+        window.aumReportData = {
+            monthly_data: data.monthly_data,
+            total_data: data.total_data
+        };
+        
+        // Update table
+        updateAumTable(data.monthly_data, data.total_data);
+        if (tableEl) tableEl.classList.remove('hidden');
+        
+    } catch (error) {
+        console.error('Error loading AUM data:', error);
+        const loadingEl = document.getElementById('aumLoading');
+        const errorEl = document.getElementById('aumError');
+        if (!silentRefresh) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) {
+            errorEl.classList.remove('hidden');
+            document.getElementById('aumErrorMessage').textContent = error.message;
+            }
+        }
+    }
+}
+
+function formatAumNumber(num) {
+    if (num === null || num === undefined) return '--';
+    return parseFloat(num).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+function formatAumPercent(num) {
+    if (num === null || num === undefined) return '--';
+    return parseFloat(num).toFixed(2) + '%';
+}
+
+// Function to load AUM data till current date
+function loadAumDataTillDate() {
+    // Update button states
+    updateAumButtonStates('tillDate');
+    // Load data without date filter (default behavior - till current date)
+    loadAumData(false, null);
+}
+
+// Function to load AUM data till previous date
+function loadAumDataTillPrevDate() {
+    // Update button states
+    updateAumButtonStates('tillPrevDate');
+    // Load data with till_prev_date flag
+    loadAumData(false, 'prev_date');
+}
+
+// Function to load AUM data till previous month
+function loadAumDataTillPrevMonth() {
+    // Update button states
+    updateAumButtonStates('tillPrevMonth');
+    // Load data with till_prev_month flag (use any non-null value to trigger the flag)
+    loadAumData(false, 'prev_month');
+}
+
+// Function to update button active states
+function updateAumButtonStates(activeButton) {
+    const tillDateBtn = document.getElementById('aumTillDateBtn');
+    const tillPrevDateBtn = document.getElementById('aumTillPrevDateBtn');
+    const tillPrevMonthBtn = document.getElementById('aumTillPrevMonthBtn');
+    
+    // Reset all buttons
+    if (tillDateBtn) {
+        tillDateBtn.classList.remove('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    }
+    if (tillPrevDateBtn) {
+        tillPrevDateBtn.classList.remove('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    }
+    if (tillPrevMonthBtn) {
+        tillPrevMonthBtn.classList.remove('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    }
+    
+    // Highlight active button
+    if (activeButton === 'tillDate' && tillDateBtn) {
+        tillDateBtn.classList.add('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    } else if (activeButton === 'tillPrevDate' && tillPrevDateBtn) {
+        tillPrevDateBtn.classList.add('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    } else if (activeButton === 'tillPrevMonth' && tillPrevMonthBtn) {
+        tillPrevMonthBtn.classList.add('ring-2', 'ring-white', 'ring-offset-2', 'ring-offset-gray-800');
+    }
+}
+
+// Helper function to get current till date for auto-refresh
+function getAumCurrentTillDate() {
+    const tillDateBtn = document.getElementById('aumTillDateBtn');
+    const tillPrevDateBtn = document.getElementById('aumTillPrevDateBtn');
+    const tillPrevMonthBtn = document.getElementById('aumTillPrevMonthBtn');
+    
+    // Check which button is active
+    const isTillDateActive = tillDateBtn && tillDateBtn.classList.contains('ring-2');
+    const isTillPrevDateActive = tillPrevDateBtn && tillPrevDateBtn.classList.contains('ring-2');
+    const isTillPrevMonthActive = tillPrevMonthBtn && tillPrevMonthBtn.classList.contains('ring-2');
+    
+    if (isTillDateActive) {
+        return null; // Till date means no filter (current date)
+    } else if (isTillPrevDateActive) {
+        // Return flag to indicate previous date endpoint
+        return 'prev_date';
+    } else if (isTillPrevMonthActive) {
+        // Return flag to indicate previous month endpoint
+        return 'prev_month';
+    } else {
+        // Default to till date if no button is active yet
+        return null;
+    }
+}
+
+function getAumMonthLabel(monthStr) {
+    if (!monthStr) return '--';
+    const date = new Date(monthStr);
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear().toString().slice(-2);
+    return `${month}-${year}`;
+}
+
+function updateAumTable(monthlyData, totalData) {
+    const thead = document.getElementById('aumTableHead');
+    const tbody = document.getElementById('aumTableBody');
+    
+    if (!thead || !tbody) return;
+    
+    // Clear existing content
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    
+    // Create header row
+    const headerRow = document.createElement('tr');
+    headerRow.className = 'border-b-2 border-blue-600/50';
+    headerRow.innerHTML = '<th class="py-4 px-5 text-left text-white font-bold text-sm uppercase tracking-wider border-r border-blue-500/30 bg-gradient-to-br from-blue-600/80 to-blue-700/80 shadow-inner">Category</th>';
+    
+    // Add month columns with alternating colors
+    monthlyData.forEach((item, index) => {
+        const monthLabel = getAumMonthLabel(item.month);
+        const isLast = index === monthlyData.length - 1;
+        const bgColor = index % 2 === 0 ? 'from-blue-600/80 to-indigo-600/80' : 'from-indigo-600/80 to-purple-600/80';
+        headerRow.innerHTML += `
+            <th colspan="2" class="py-4 px-5 text-center text-white font-bold text-sm uppercase tracking-wider ${isLast ? '' : 'border-r border-blue-500/30'} bg-gradient-to-br ${bgColor} shadow-inner">${monthLabel}</th>
+        `;
+    });
+    
+    thead.appendChild(headerRow);
+    
+    // Create sub-header row for Units/Sum
+    const subHeaderRow = document.createElement('tr');
+    subHeaderRow.className = 'border-b border-blue-500/30';
+    subHeaderRow.innerHTML = '<th class="py-3 px-5 text-left text-blue-100 font-semibold text-xs uppercase tracking-wider border-r border-blue-500/30 bg-blue-700/50"></th>';
+    
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        const bgColor = index % 2 === 0 ? 'bg-blue-700/50' : 'bg-indigo-700/50';
+        subHeaderRow.innerHTML += `
+            <th class="py-3 px-4 text-center text-blue-100 font-semibold text-xs uppercase tracking-wider ${isLast ? '' : 'border-r border-blue-500/30'} ${bgColor}">Units</th>
+            <th class="py-3 px-4 text-center text-blue-100 font-semibold text-xs uppercase tracking-wider ${isLast ? '' : 'border-r border-blue-500/30'} ${bgColor}">Sum</th>
+        `;
+    });
+    
+    thead.appendChild(subHeaderRow);
+    
+    // Helper function to create a data cell with alternating column colors
+    function createCell(units, sum, isBold = false, isHighlight = false, isLast = false, colIndex = 0) {
+        const boldClass = isBold ? 'font-bold text-gray-900' : 'text-gray-800';
+        const highlightClass = isHighlight ? 'bg-gradient-to-r from-yellow-400/25 via-yellow-500/20 to-yellow-400/25 border-l-2 border-yellow-400' : '';
+        const borderClass = isLast ? '' : 'border-r border-gray-300';
+        const colBg = colIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        const cellBg = highlightClass || colBg;
+        return `
+            <td class="py-3 px-4 text-center ${boldClass} ${borderClass} ${cellBg} font-mono text-sm">${formatAumNumber(units)}</td>
+            <td class="py-3 px-4 text-center ${boldClass} ${borderClass} ${cellBg} font-mono text-sm">${formatAumNumber(sum)}</td>
+        `;
+    }
+    
+    // Helper function to create a single value cell (for ATS, percentages, etc.)
+    function createSingleCell(value, isBold = false, isHighlight = false, formatter = formatAumNumber, isLast = false, colIndex = 0) {
+        const boldClass = isBold ? 'font-bold text-gray-900' : 'text-gray-800';
+        const highlightClass = isHighlight ? 'bg-gradient-to-r from-yellow-400/25 via-yellow-500/20 to-yellow-400/25 border-l-2 border-yellow-400' : '';
+        const borderClass = isLast ? '' : 'border-r border-gray-300';
+        const colBg = colIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        const cellBg = highlightClass || colBg;
+        return `
+            <td colspan="2" class="py-3 px-4 text-center ${boldClass} ${borderClass} ${cellBg} font-mono text-sm">${formatter(value)}</td>
+        `;
+    }
+    
+    // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - NEW
+    let row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-semibold border-r border-gray-300 bg-white">STPL (SHORT TERM PERSONAL LOAN)</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.new_units, item.new_sum, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - REPEAT
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Loan Disbursed - REPEAT</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.repeat_units, item.repeat_sum, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // STPL (SHORT TERM PERSONAL LOAN) - Loan Disbursed - Total
+    row = document.createElement('tr');
+    row.className = 'border-b-2 border-blue-500/40 hover:bg-blue-50/20 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-bold border-r border-gray-300 bg-white pl-8">Loan Disbursed - Total</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.total_units, item.total_sum, true, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // ATS
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-semibold border-r border-gray-300 bg-white">ATS</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.ats, false, false, formatAumNumber, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Overdue Cases - Running Cases
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-semibold border-r border-gray-300 bg-white">Overdue Cases</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.running_units, item.running_sum, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Over Due +1-30 Day
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Over Due +1-30 Day</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.od_1_30_units || 0, item.od_1_30_sum || 0, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Over Due +31-90 Day
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Over Due +31-90 Day</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.od_31_90_units || 0, item.od_31_90_sum || 0, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Over Due 90+ Day
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Over Due 90+ Day</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createCell(item.od_90p_units || 0, item.od_90p_sum || 0, false, false, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Loan Book(AUM) - Highlighted with blue gradient like header
+    row = document.createElement('tr');
+    row.className = 'border-b-2 border-blue-500/50 hover:bg-blue-500/10 transition-colors duration-150';
+    row.innerHTML = '<td class="py-4 px-5 text-left text-white font-bold text-base border-r border-blue-500/30 bg-gradient-to-br from-blue-600/80 to-blue-700/80 shadow-inner">Loan Book(AUM)</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        const aumUnits = item.running_units || 0;
+        const aumSum = item.running_sum || 0;
+        const bgColor = index % 2 === 0 ? 'from-blue-600/80 to-indigo-600/80' : 'from-indigo-600/80 to-purple-600/80';
+        row.innerHTML += `
+            <td class="py-4 px-4 text-center text-white font-bold border-r border-blue-500/30 bg-gradient-to-br ${bgColor} shadow-inner font-mono text-sm">${formatAumNumber(aumUnits)}</td>
+            <td class="py-4 px-4 text-center text-white font-bold border-r border-blue-500/30 bg-gradient-to-br ${bgColor} shadow-inner font-mono text-sm">${formatAumNumber(aumSum)}</td>
+        `;
+    });
+    tbody.appendChild(row);
+    
+    // DPD Percentages - 1+DPD%
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-semibold border-r border-gray-300 bg-white">DPD Percentages</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        const dpd1 = item.dpd_1_30_count_percent || 0;
+        row.innerHTML += createSingleCell(dpd1, false, false, formatAumPercent, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // 30+DPD%
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">30+DPD%</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        const dpd30 = item.dpd_31_90_count_percent || 0;
+        row.innerHTML += createSingleCell(dpd30, false, false, formatAumPercent, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // 90+DPD%
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">90+DPD%</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        const dpd90 = item.dpd_90p_count_percent || 0;
+        row.innerHTML += createSingleCell(dpd90, false, false, formatAumPercent, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Income/Financials - PF Income (Incl. GST)
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 font-semibold border-r border-gray-300 bg-white">Income/Financials</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.total_pf, false, false, formatAumNumber, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Interest Income
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Interest Income</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.interest_amount, false, false, formatAumNumber, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Avg PF (Incl. GST)
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Avg PF (Incl. GST)</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.avg_pf, false, false, formatAumNumber, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Avg ROI
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Avg ROI</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.avg_roi, false, false, formatAumPercent, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Avg Tenure
+    row = document.createElement('tr');
+    row.className = 'border-b border-gray-700/40 hover:bg-white/10 transition-colors duration-150 bg-white/5';
+    row.innerHTML = '<td class="py-3 px-5 text-left text-gray-900 border-r border-gray-300 bg-white pl-8">Avg Tenure</td>';
+    monthlyData.forEach((item, index) => {
+        const isLast = index === monthlyData.length - 1;
+        row.innerHTML += createSingleCell(item.avg_tenure, false, false, formatAumNumber, isLast, index);
+    });
+    tbody.appendChild(row);
+    
+    // Total Loan Book Aum - Highlighted with blue gradient like header
+    if (totalData) {
+        // Check for aum_sum first, then running_sum as fallback
+        const totalValue = totalData.running_sum || null;
+        if (totalValue !== null && totalValue !== undefined) {
+        const totalRow = document.createElement('tr');
+        totalRow.className = 'border-t-2 border-blue-500/60 hover:bg-blue-500/10 transition-colors duration-150';
+            totalRow.innerHTML = `<td class="py-4 px-5 text-left text-white font-bold text-base border-r border-blue-500/30 bg-gradient-to-br from-blue-600/80 to-blue-700/80 shadow-inner">Total Loan Book Aum</td><td colspan="${monthlyData.length * 2}" class="py-4 px-5 text-center text-white font-bold text-lg font-mono bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-600/80 shadow-inner">${formatAumNumber(totalValue)}</td>`;
+        tbody.appendChild(totalRow);
+        } else {
+            console.warn('AUM total_data exists but no running_sum found:', totalData);
+        }
+    } else {
+        console.warn('AUM total_data is missing from API response');
+    }
 }
 
 // Update fraud filter options when filters change
@@ -7261,6 +8594,9 @@ function loadFraudStateChart(filters = {}) {
                             labels: {
                                 color: '#ffffff'
                             }
+                        },
+                        datalabels: {
+                            display: false
                         }
                     },
                     scales: {
@@ -7469,6 +8805,7 @@ function loadFraudCityCollectedChart(filters = {}) {
                         borderRadius: 4,
                     }]
                 },
+                plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
@@ -7495,6 +8832,20 @@ function loadFraudCityCollectedChart(filters = {}) {
                                         'Applications: ' + city.total_applications
                                     ];
                                 }
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            color: '#ffffff',
+                            anchor: 'end',
+                            align: 'right',
+                            offset: 10,
+                            font: {
+                                weight: 'bold',
+                                size: 11
+                            },
+                            formatter: function(value) {
+                                return value.toFixed(2) + '%';
                             }
                         }
                     },
@@ -7568,6 +8919,7 @@ function loadFraudCityUncollectedChart(filters = {}) {
                         borderRadius: 4,
                     }]
                 },
+                plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
@@ -7595,6 +8947,20 @@ function loadFraudCityUncollectedChart(filters = {}) {
                                         'Applications: ' + city.total_applications
                                     ];
                                 }
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            color: '#ffffff',
+                            anchor: 'end',
+                            align: 'right',
+                            offset: 10,
+                            font: {
+                                weight: 'bold',
+                                size: 11
+                            },
+                            formatter: function(value) {
+                                return value.toFixed(2) + '%';
                             }
                         }
                     },
@@ -8376,6 +9742,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="flex gap-6 text-sm text-gray-300">
                     <div>Position as on: <span id="positionDate" class="text-white font-medium">--</span></div>
                 </div>
+                <script>
+                    // Function to set today's date (local timezone)
+                    function setTodayDate() {
+                        const today = new Date();
+                        // Get local date components to avoid timezone issues
+                        const day = String(today.getDate()).padStart(2, '0');
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const month = monthNames[today.getMonth()];
+                        const year = String(today.getFullYear()).slice(-2); // Last 2 digits of year
+                        const formattedDate = `${day}-${month}-${year}`;
+                        const positionDateEl = document.getElementById('positionDate');
+                        if (positionDateEl) {
+                            positionDateEl.textContent = formattedDate;
+                        }
+                    }
+                    
+                    // Set date on page load
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', setTodayDate);
+                    } else {
+                        setTodayDate();
+                    }
+                    
+                    // Also set when tab is shown
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const dailyPerformanceTab = document.getElementById('dailyPerformanceTab');
+                        if (dailyPerformanceTab) {
+                            dailyPerformanceTab.addEventListener('click', function() {
+                                setTimeout(setTodayDate, 100);
+                            });
+                        }
+                    });
+                </script>
             </div>
 
             <!-- Sanction Performance Section -->
@@ -8693,14 +10092,54 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <thead>
                                     <tr class="border-b border-gray-800 text-gray-300 text-sm">
                                         <th class="py-3 px-4 text-left font-medium">Credit Person</th>
-                                        <th class="py-3 px-4 text-right font-medium">Loans</th>
-                                        <th class="py-3 px-4 text-right font-medium">Recovered</th>
-                                        <th class="py-3 px-4 text-right font-medium">Not Recovered</th>
-                                        <th class="py-3 px-4 text-right font-medium">Recovery %</th>
-                                        <th class="py-3 px-4 text-right font-medium">Loan Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Repayment Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Collected Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Pending Amount</th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('loans')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Loans</span>
+                                                <span id="sortLoans" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('recovered')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Recovered</span>
+                                                <span id="sortRecovered" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('notRecovered')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Not Recovered</span>
+                                                <span id="sortNotRecovered" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('recoveryRate')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Recovery %</span>
+                                                <span id="sortRecoveryRate" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('loanAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Loan Amount</span>
+                                                <span id="sortLoanAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('repaymentAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Repayment Amount</span>
+                                                <span id="sortRepaymentAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('receivedAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Collected Amount</span>
+                                                <span id="sortReceivedAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('pendingAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Pending Amount</span>
+                                                <span id="sortPendingAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody id="creditPersonTableBody">
@@ -8712,6 +10151,122 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         </div> <!-- End Credit Person Wise Tab -->
+
+        <!-- AUM Report Tab -->
+        <div id="aumReportContent" class="tab-content hidden">
+            <div class="card border border-gray-700/30 shadow-xl bg-gradient-to-br from-gray-900/50 to-gray-800/30">
+                <div class="p-6 sm:p-8">
+                    <div class="mb-6 pb-4 border-b border-gray-700/50">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30">
+                                    <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-3 mb-1">
+                                        <h2 class="text-2xl sm:text-3xl font-bold text-white">AUM Report</h2>
+                                        <span class="px-3 py-1 bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 text-xs font-bold rounded-full uppercase tracking-wide">UNDER DEVELOPMENT</span>
+                                    </div>
+                                    <p class="text-sm text-gray-400">Assets Under Management Report</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4 flex-nowrap">
+                                <button
+                                    id="aumTillDateBtn"
+                                    onclick="loadAumDataTillDate()"
+                                    class="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 whitespace-nowrap"
+                                    title="AUM Report Till Date"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    AUM Report Till Date
+                                </button>
+                                <button
+                                    id="aumTillPrevDateBtn"
+                                    onclick="loadAumDataTillPrevDate()"
+                                    class="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white text-sm font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 whitespace-nowrap"
+                                    title="AUM Till Previous Date"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    AUM Till Previous Date
+                                </button>
+                                <button
+                                    id="aumTillPrevMonthBtn"
+                                    onclick="loadAumDataTillPrevMonth()"
+                                    class="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 whitespace-nowrap"
+                                    title="AUM Report Till Previous Month"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    AUM Report Till Previous Month
+                                </button>
+                            <button
+                                id="aumExportBtn"
+                                    onclick="exportAumReport()"
+                                    class="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 whitespace-nowrap"
+                                title="Export to Excel"
+                            >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Export to Excel
+                            </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Development Notice -->
+                    <div class="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                        <div class="flex items-start gap-3">
+                            <svg class="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                            <div>
+                                <p class="text-yellow-300 font-semibold mb-1">Development Notice</p>
+                                <p class="text-yellow-200/80 text-sm">Some changes are under development. In the database, new data schema is under update from backend side.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div id="aumLoading" class="text-center py-16">
+                        <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-500/30 border-t-blue-500"></div>
+                        <p class="mt-4 text-gray-400 font-medium">Loading AUM data...</p>
+                    </div>
+                    
+                    <!-- AUM Report Table -->
+                    <div id="aumTableContainer" class="hidden overflow-x-auto rounded-lg border-2 border-gray-700/60 shadow-2xl bg-gradient-to-br from-gray-900/60 to-gray-800/40">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full border-collapse">
+                                <thead id="aumTableHead" class="sticky top-0 z-10 shadow-lg">
+                                    <!-- Headers will be populated by JavaScript -->
+                                </thead>
+                                <tbody id="aumTableBody" class="divide-y divide-gray-700/40">
+                                    <!-- Rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Error State -->
+                    <div id="aumError" class="hidden text-center py-16">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 mb-4">
+                            <svg class="h-8 w-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-red-400 text-lg font-semibold mb-2">Error loading AUM data</p>
+                        <p class="text-gray-400 text-sm" id="aumErrorMessage"></p>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End AUM Report Tab -->
 
     </div>
 </div>
@@ -8787,10 +10342,84 @@ window.clearSavedTab = function() {
 // Disbursal tab is ready for fresh implementation
 
 // ===============================
-// DISBURSAL TAB FUNCTIONALITY
+// AUM REPORT TAB FUNCTIONALITY
 // ===============================
 
-// Disbursal tab is ready for fresh implementation
+function toggleAumFilters() {
+    const content = document.getElementById('aumFiltersContent');
+    const icon = document.getElementById('aumFiltersToggleIcon');
+    
+    if (content && icon) {
+        const isHidden = content.classList.contains('hidden');
+        
+        if (isHidden) {
+            content.classList.remove('hidden');
+            icon.style.transform = 'rotate(0deg)';
+        } else {
+            content.classList.add('hidden');
+            icon.style.transform = 'rotate(180deg)';
+        }
+    }
+}
+
+function initializeAumFilters() {
+    const content = document.getElementById('aumFiltersContent');
+    const icon = document.getElementById('aumFiltersToggleIcon');
+    
+    if (content && icon) {
+        content.classList.add('hidden');
+        icon.style.transform = 'rotate(180deg)';
+    }
+}
+
+function setDefaultAumDates() {
+    const today = new Date();
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(today.getMonth() - 6);
+    
+    const startDateInput = document.getElementById('aumStartDate');
+    const endDateInput = document.getElementById('aumEndDate');
+    
+    if (startDateInput && endDateInput) {
+        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
+        const endDateStr = today.toISOString().split('T')[0];
+        
+        startDateInput.value = startDateStr;
+        endDateInput.value = endDateStr;
+    }
+}
+
+function applyAumFilters() {
+    const startDate = document.getElementById('aumStartDate').value;
+    const endDate = document.getElementById('aumEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date must be before end date');
+        return;
+    }
+    
+    loadAumData();
+    
+    // Collapse filter section
+    const content = document.getElementById('aumFiltersContent');
+    const icon = document.getElementById('aumFiltersToggleIcon');
+    if (content && icon) {
+        content.classList.add('hidden');
+        icon.style.transform = 'rotate(180deg)';
+    }
+}
+
+function resetAumFilters() {
+    setDefaultAumDates();
+}
+
+// AUM Report functions are now defined in the main script block above
+// AUM Report export function is now defined in the main script block above
 
 
 
