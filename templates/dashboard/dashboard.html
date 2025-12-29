@@ -3157,10 +3157,10 @@ async function loadDailyPerformanceData(silentRefresh = false) {
             positionDateEl.textContent = formattedDate;
         }
         
-        // Update Sanction Performance section
+        // Update Daily Sanction Performance section
         if (data.sanction_performance) {
             const sp = data.sanction_performance;
-            console.log('Sanction Performance Data:', sp);
+            console.log('Daily Sanction Performance Data:', sp);
             
             const monthlyTargetInput = document.getElementById('monthlyTargetInput');
             if (monthlyTargetInput) {
@@ -3352,10 +3352,10 @@ async function exportPerformanceReport() {
         applyBorders(worksheet.getCell(emptyRow1, 1));
         applyBorders(worksheet.getCell(emptyRow1, 2));
         
-        // Sanction Performance Section Header - Bold with light green background, merged A-C
+        // Daily Sanction Performance Section Header - Bold with light green background, merged A-C
         worksheet.mergeCells(rowIndex, 1, rowIndex, 3);
         const spHeader = worksheet.getCell(rowIndex, 1);
-        spHeader.value = 'Sanction Performance';
+        spHeader.value = 'Daily Sanction Performance';
         spHeader.font = { bold: true, size: 12 };
         spHeader.fill = {
             type: 'pattern',
@@ -3372,7 +3372,7 @@ async function exportPerformanceReport() {
         applyBorders(worksheet.getCell(emptySPRow, 2));
         applyBorders(worksheet.getCell(emptySPRow, 3));
         
-        // Sanction Performance Metrics
+        // Daily Sanction Performance Metrics
         if (data.sanction_performance) {
             const sp = data.sanction_performance;
             const metrics = [
@@ -7684,7 +7684,7 @@ function switchTab(tabName) {
         console.log('Switching to loan count tab, initializing...');
         setDefaultLoanCountDates();
     }
-    
+    //for git push
     // Initialize disbursal tab if it's being switched to
     if (tabName === 'disbursal') {
         console.log('Switching to disbursal tab - loading data...');
@@ -9777,14 +9777,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 </script>
             </div>
 
-            <!-- Sanction Performance Section -->
+            <!-- Daily Sanction Performance Section -->
             <div class="card mb-6">
                 <div class="p-6">
                     <div class="flex items-center gap-3 mb-6">
                         <svg class="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
-                        <h2 class="text-xl font-semibold text-white">Sanction Performance</h2>
+                        <h2 class="text-xl font-semibold text-white">Daily Sanction Performance</h2>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-4">
