@@ -1140,6 +1140,68 @@ if (window.history.replaceState) {
             </div>
         </div>
 
+        <!-- Lowest Collection % Dates by Month -->
+        <div class="chart-container rounded-2xl p-8 shadow-2xl">
+            <!-- Header Block -->
+            <div class="flex items-center gap-4 mb-8">
+                <div class="p-3 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 shadow-lg">
+                    <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-foreground">Lowest Collection % Dates by Month</h3>
+                    <p class="text-sm text-muted-foreground font-medium">Dates with lowest collection percentage for each month</p>
+                </div>
+            </div>
+            
+            <!-- Loading State -->
+            <div id="lowestCollectionDatesLoading" class="text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-red-500/30 border-t-red-500"></div>
+                <p class="mt-4 text-gray-400 font-medium">Loading lowest collection dates...</p>
+            </div>
+            
+            <!-- Table -->
+            <div id="lowestCollectionDatesTable" class="hidden w-full overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-border">
+                            <th class="text-left py-3 px-4 font-medium text-muted-foreground">Month</th>
+                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Lowest Collection %</th>
+                            <th class="text-left py-3 px-4 font-medium text-muted-foreground">Date(s)</th>
+                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Repayment Amount</th>
+                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Collected Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lowestCollectionDatesTableBody">
+                        <!-- Rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="lowestCollectionDatesEmpty" class="hidden text-center py-12">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-500/10 border border-gray-500/20 mb-4">
+                    <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <p class="text-gray-400 text-lg font-semibold mb-2">No data available</p>
+                <p class="text-gray-500 text-sm">No collection data found for the selected filters.</p>
+            </div>
+            
+            <!-- Error State -->
+            <div id="lowestCollectionDatesError" class="hidden text-center py-12">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 mb-4">
+                    <svg class="h-8 w-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <p class="text-red-400 text-lg font-semibold mb-2">Error loading data</p>
+                <p class="text-gray-400 text-sm" id="lowestCollectionDatesErrorMessage"></p>
+            </div>
+        </div>
+                
         <!-- Mobile Responsive City-wise Analysis Charts -->
         <!-- Top Cities - Collection Rate Chart -->
         <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl mt-6 sm:mt-8">
@@ -3010,6 +3072,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadStatePendingChart();
     loadTimeSeriesChart();
     loadTopCitiesCollectionChart();
+    loadLowestCollectionDates();
     
     // Only load pending cases chart if collection tab is active
     if (activeTab === 'collection') {
@@ -3691,20 +3754,28 @@ async function exportAumReport() {
             return parseFloat(value).toFixed(2) + '%';
         }
         
-        // Define colors
-        const headerBlue = { argb: 'FF1E3A5F' }; // Dark blue for headers
-        const yellowBg = { argb: 'FFFFFFD4' }; // Yellow background
-        const yellowText = { argb: 'FF856404' }; // Dark yellow text
+        // Define colors - Professional theme
+        const headerBlue = { argb: 'FF2E75B6' }; // Professional blue for headers
+        const headerBlueDark = { argb: 'FF1F4E79' }; // Darker blue for sub-headers
+        const yellowBg = { argb: 'FFFFF9C4' }; // Soft yellow background
+        const yellowText = { argb: 'FF7D6608' }; // Dark yellow text
         const whiteBg = { argb: 'FFFFFFFF' }; // White background
-        const darkText = { argb: 'FF000000' }; // Black text
-        const lightGrayBg = { argb: 'FFF5F5F5' }; // Light gray for alternating columns
+        const darkText = { argb: 'FF212121' }; // Dark gray text (softer than black)
+        const lightGrayBg = { argb: 'FFF8F9FA' }; // Very light gray for alternating columns
+        const headerText = { argb: 'FFFFFFFF' }; // White text for headers
+        const borderColor = { argb: 'FFCCCCCC' }; // Light gray borders
+        const borderColorDark = { argb: 'FF999999' }; // Medium gray for header borders
         
         // Set column widths
-        worksheet.getColumn(1).width = 35; // Category column
+        worksheet.getColumn(1).width = 38; // Category column - slightly wider
+        // Set data column widths
+        for (let i = 2; i <= 1 + (data.monthly_data.length * 2); i++) {
+            worksheet.getColumn(i).width = 12; // Consistent width for data columns
+        }
         
         // Create header row with "Aum Report" title
-        const titleRow = worksheet.addRow(['Aum Report']);
-        titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+        const titleRow = worksheet.addRow(['AUM REPORT']);
+        titleRow.getCell(1).font = { bold: true, size: 16, color: headerText, name: 'Calibri' };
         titleRow.getCell(1).fill = {
             type: 'pattern',
             pattern: 'solid',
@@ -3712,26 +3783,33 @@ async function exportAumReport() {
         };
         titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.mergeCells(1, 1, 1, 1 + (data.monthly_data.length * 2));
-        titleRow.height = 30;
+        titleRow.height = 35;
+        titleRow.getCell(1).border = {
+            top: { style: 'medium', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
+        };
         
         // Add empty row
-        worksheet.addRow([]);
+        const emptyRow = worksheet.addRow([]);
+        emptyRow.height = 5;
         
         // Create main header row with months
         const headerRow = worksheet.addRow(['']);
-        headerRow.getCell(1).value = '';
+        headerRow.getCell(1).value = 'Category';
         headerRow.getCell(1).fill = {
             type: 'pattern',
             pattern: 'solid',
             fgColor: headerBlue
         };
-        headerRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-        headerRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        headerRow.getCell(1).font = { bold: true, size: 12, color: headerText, name: 'Calibri' };
+        headerRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
         headerRow.getCell(1).border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } }
+            top: { style: 'medium', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
         };
         
         let colIndex = 2;
@@ -3748,19 +3826,19 @@ async function exportAumReport() {
                 pattern: 'solid',
                 fgColor: headerBlue
             };
-            monthCell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-            monthCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            monthCell.font = { bold: true, size: 12, color: headerText, name: 'Calibri' };
+            monthCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             monthCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: isLast ? 'thin' : 'none', color: { argb: 'FF000000' } }
+                top: { style: 'medium', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: isLast ? 'medium' : 'medium', color: borderColorDark }
             };
             
             colIndex += 2;
         });
         
-        headerRow.height = 25;
+        headerRow.height = 28;
         
         // Create sub-header row for Units/Sum
         const subHeaderRow = worksheet.addRow(['']);
@@ -3768,21 +3846,21 @@ async function exportAumReport() {
         subHeaderRow.getCell(1).fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FF4A5568' }
+            fgColor: headerBlueDark // Darker blue for sub-header
         };
-        subHeaderRow.getCell(1).font = { bold: true, size: 10, color: { argb: 'FFE2E8F0' } };
+        subHeaderRow.getCell(1).font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
         subHeaderRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
         subHeaderRow.getCell(1).border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } }
+            top: { style: 'thin', color: borderColorDark },
+            bottom: { style: 'medium', color: borderColorDark },
+            left: { style: 'medium', color: borderColorDark },
+            right: { style: 'medium', color: borderColorDark }
         };
         
         colIndex = 2;
         data.monthly_data.forEach((item, index) => {
             const isLast = index === data.monthly_data.length - 1;
-            const colBg = index % 2 === 0 ? { argb: 'FF4A5568' } : { argb: 'FF2D3748' };
+            const colBg = headerBlueDark; // Consistent dark blue for sub-header
             
             // Units column
             const unitsCell = subHeaderRow.getCell(colIndex);
@@ -3792,13 +3870,13 @@ async function exportAumReport() {
                 pattern: 'solid',
                 fgColor: colBg
             };
-            unitsCell.font = { bold: true, size: 10, color: { argb: 'FFE2E8F0' } };
+            unitsCell.font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
             unitsCell.alignment = { horizontal: 'center', vertical: 'middle' };
             unitsCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
+                top: { style: 'thin', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: 'thin', color: borderColorDark }
             };
             
             // Sum column
@@ -3809,19 +3887,19 @@ async function exportAumReport() {
                 pattern: 'solid',
                 fgColor: colBg
             };
-            sumCell.font = { bold: true, size: 10, color: { argb: 'FFE2E8F0' } };
+            sumCell.font = { bold: true, size: 11, color: headerText, name: 'Calibri' };
             sumCell.alignment = { horizontal: 'center', vertical: 'middle' };
             sumCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: isLast ? 'thin' : 'none', color: { argb: 'FF000000' } }
+                top: { style: 'thin', color: borderColorDark },
+                bottom: { style: 'medium', color: borderColorDark },
+                left: { style: 'thin', color: borderColorDark },
+                right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
             };
             
             colIndex += 2;
         });
         
-        subHeaderRow.height = 20;
+        subHeaderRow.height = 22;
         
         // Helper function to create a data row
         function addDataRow(categoryLabel, isBold = false, isIndented = false, isYellow = false, isTotal = false) {
@@ -3831,7 +3909,8 @@ async function exportAumReport() {
             categoryCell.font = {
                 bold: isBold,
                 size: isTotal ? 12 : 11,
-                color: isYellow ? yellowText : darkText
+                color: isYellow ? yellowText : darkText,
+                name: 'Calibri'
             };
             categoryCell.fill = {
                 type: 'pattern',
@@ -3841,20 +3920,22 @@ async function exportAumReport() {
             categoryCell.alignment = { 
                 horizontal: isIndented ? 'left' : 'left', 
                 vertical: 'middle',
-                indent: isIndented ? 1 : 0
+                indent: isIndented ? 1 : 0,
+                wrapText: true
             };
             categoryCell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
+                top: { style: 'thin', color: borderColor },
+                bottom: { style: 'thin', color: borderColor },
+                left: { style: 'medium', color: borderColorDark },
+                right: { style: 'thin', color: borderColor }
             };
+            row.height = isTotal ? 22 : 18;
             
             return row;
         }
         
         // Helper function to add data cells
-        function addDataCells(row, getValue, isYellow = false, isTotal = false, formatter = formatNumber) {
+        function addDataCells(row, getValue, isYellow = false, isTotal = false, formatter = formatNumber, allowDecimals = false) {
             let colIndex = 2;
             data.monthly_data.forEach((item, index) => {
                 const isLast = index === data.monthly_data.length - 1;
@@ -3862,14 +3943,20 @@ async function exportAumReport() {
                 const cellBg = isYellow ? yellowBg : colBg;
                 
                 const value = getValue(item);
+                // Determine if this is a percentage formatter
+                const isPercent = formatter === formatPercent;
+                
                 if (Array.isArray(value)) {
                     // Two values (Units and Sum)
                     const unitsCell = row.getCell(colIndex);
-                    unitsCell.value = formatter(value[0]);
+                    const unitsNum = parseFloat(value[0]) || 0;
+                    unitsCell.value = unitsNum; // Set numeric value
+                    unitsCell.numFmt = '#,##0'; // Excel number format with thousand separators
                     unitsCell.font = {
                         bold: isTotal,
                         size: isTotal ? 12 : 11,
-                        color: isYellow ? yellowText : darkText
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
                     };
                     unitsCell.fill = {
                         type: 'pattern',
@@ -3878,18 +3965,21 @@ async function exportAumReport() {
                     };
                     unitsCell.alignment = { horizontal: 'center', vertical: 'middle' };
                     unitsCell.border = {
-                        top: { style: 'thin', color: { argb: 'FF000000' } },
-                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                        left: { style: 'thin', color: { argb: 'FF000000' } },
-                        right: { style: 'thin', color: { argb: 'FF000000' } }
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: 'thin', color: borderColor }
                     };
                     
                     const sumCell = row.getCell(colIndex + 1);
-                    sumCell.value = formatter(value[1]);
+                    const sumNum = parseFloat(value[1]) || 0;
+                    sumCell.value = sumNum; // Set numeric value
+                    sumCell.numFmt = '#,##0'; // Excel number format with thousand separators
                     sumCell.font = {
                         bold: isTotal,
                         size: isTotal ? 12 : 11,
-                        color: isYellow ? yellowText : darkText
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
                     };
                     sumCell.fill = {
                         type: 'pattern',
@@ -3898,20 +3988,36 @@ async function exportAumReport() {
                     };
                     sumCell.alignment = { horizontal: 'center', vertical: 'middle' };
                     sumCell.border = {
-                        top: { style: 'thin', color: { argb: 'FF000000' } },
-                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                        left: { style: 'thin', color: { argb: 'FF000000' } },
-                        right: { style: isLast ? 'thin' : 'none', color: { argb: 'FF000000' } }
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
                     };
                 } else {
                     // Single value (spans two columns)
                     worksheet.mergeCells(row.number, colIndex, row.number, colIndex + 1);
                     const cell = row.getCell(colIndex);
-                    cell.value = formatter(value);
+                    let numValue = parseFloat(value) || 0;
+                    if (isPercent) {
+                        // If value is > 1, it's likely a percentage (0-100), convert to decimal (0-1) for Excel
+                        if (numValue > 1) {
+                            numValue = numValue / 100;
+                        }
+                        cell.value = numValue; // Set numeric value
+                        cell.numFmt = '0.00%'; // Excel percentage format
+                    } else {
+                        cell.value = numValue; // Set numeric value
+                        if (allowDecimals) {
+                            cell.numFmt = '#,##0.00'; // Excel number format with thousand separators and 2 decimals
+                        } else {
+                            cell.numFmt = '#,##0'; // Excel number format with thousand separators
+                        }
+                    }
                     cell.font = {
                         bold: isTotal,
                         size: isTotal ? 12 : 11,
-                        color: isYellow ? yellowText : darkText
+                        color: isYellow ? yellowText : darkText,
+                        name: 'Calibri'
                     };
                     cell.fill = {
                         type: 'pattern',
@@ -3920,10 +4026,10 @@ async function exportAumReport() {
                     };
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     cell.border = {
-                        top: { style: 'thin', color: { argb: 'FF000000' } },
-                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                        left: { style: 'thin', color: { argb: 'FF000000' } },
-                        right: { style: isLast ? 'thin' : 'none', color: { argb: 'FF000000' } }
+                        top: { style: 'thin', color: borderColor },
+                        bottom: { style: 'thin', color: borderColor },
+                        left: { style: 'thin', color: borderColor },
+                        right: { style: isLast ? 'medium' : 'thin', color: borderColorDark }
                     };
                 }
                 
@@ -3945,7 +4051,7 @@ async function exportAumReport() {
         
         // ATS
         row = addDataRow('ATS', true, false, false, false);
-        addDataCells(row, (item) => item.ats || 0, false, false, formatNumber);
+        addDataCells(row, (item) => item.ats || 0, false, false, formatNumber, true);
         
         // Running Cases (main category for overdue cases)
         row = addDataRow('Running Cases', true, false, false, false);
@@ -3967,7 +4073,7 @@ async function exportAumReport() {
         row = addDataRow('Loan Book(AUM)', true, false, true, false);
         addDataCells(row, (item) => {
             const aumUnits = item.running_units || 0;
-            const aumSum = item.aum_sum || item.running_sum || 0;
+            const aumSum = item.running_sum || 0;
             return [aumUnits, aumSum];
         }, true);
         
@@ -3993,7 +4099,7 @@ async function exportAumReport() {
         
         // Avg PF (Incl. GST)
         row = addDataRow('Avg PF (Incl. GST)', false, true, false, false);
-        addDataCells(row, (item) => item.avg_pf || 0, false, false, formatNumber);
+        addDataCells(row, (item) => item.avg_pf || 0, false, false, formatNumber, true);
         
         // Avg ROI
         row = addDataRow('Avg ROI', false, true, false, false);
@@ -4001,17 +4107,18 @@ async function exportAumReport() {
         
         // Avg Tenure
         row = addDataRow('Avg Tenure', false, true, false, false);
-        addDataCells(row, (item) => item.avg_tenure || 0, false, false, formatNumber);
+        addDataCells(row, (item) => item.avg_tenure || 0, false, false, formatNumber, true);
         
         // Total Loan Book Aum - Yellow highlighted (spans all columns)
         if (data.total_data) {
             // Check for aum_sum first, then running_sum as fallback
-            const totalValue = data.total_data.aum_sum || data.total_data.running_sum || null;
+            const totalValue = data.total_data.running_sum || null;
             if (totalValue !== null && totalValue !== undefined) {
                 row = worksheet.addRow(['']);
+                row.height = 24;
                 const categoryCell = row.getCell(1);
-                categoryCell.value = 'Total Loan Book Aum';
-                categoryCell.font = { bold: true, size: 12, color: yellowText };
+                categoryCell.value = 'Total Loan Book AUM';
+                categoryCell.font = { bold: true, size: 12, color: yellowText, name: 'Calibri' };
                 categoryCell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
@@ -4019,17 +4126,19 @@ async function exportAumReport() {
                 };
                 categoryCell.alignment = { horizontal: 'left', vertical: 'middle' };
                 categoryCell.border = {
-                    top: { style: 'thin', color: { argb: 'FF000000' } },
-                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                    left: { style: 'thin', color: { argb: 'FF000000' } },
-                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                    top: { style: 'medium', color: borderColorDark },
+                    bottom: { style: 'medium', color: borderColorDark },
+                    left: { style: 'medium', color: borderColorDark },
+                    right: { style: 'thin', color: borderColor }
                 };
                 
                 // Merge remaining cells for the total value
                 worksheet.mergeCells(row.number, 2, row.number, 1 + (data.monthly_data.length * 2));
                 const totalCell = row.getCell(2);
-                totalCell.value = formatNumber(totalValue);
-                totalCell.font = { bold: true, size: 12, color: yellowText };
+                const totalNum = parseFloat(totalValue) || 0;
+                totalCell.value = totalNum; // Set numeric value
+                totalCell.numFmt = '#,##0'; // Excel number format with thousand separators
+                totalCell.font = { bold: true, size: 12, color: yellowText, name: 'Calibri' };
                 totalCell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
@@ -4037,10 +4146,10 @@ async function exportAumReport() {
                 };
                 totalCell.alignment = { horizontal: 'center', vertical: 'middle' };
                 totalCell.border = {
-                    top: { style: 'thin', color: { argb: 'FF000000' } },
-                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                    left: { style: 'thin', color: { argb: 'FF000000' } },
-                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                    top: { style: 'medium', color: borderColorDark },
+                    bottom: { style: 'medium', color: borderColorDark },
+                    left: { style: 'thin', color: borderColor },
+                    right: { style: 'medium', color: borderColorDark }
                 };
             }
         }
@@ -4081,11 +4190,17 @@ async function exportAumReport() {
         }
         // If tillDate is active or no button is active, use today's date (default)
         
+        // Get current date and time for filename
+        const now = new Date();
+        const downloadDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const downloadTime = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+        const downloadDateTime = `${downloadDate}_${downloadTime}`;
+        
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `AUM_Report_${reportDate}.xlsx`;
+        a.download = `AUM_Report_${reportDate}_Downloaded_${downloadDateTime}.xlsx`;
         document.body.appendChild(a);
         console.log('Triggering download...');
         a.click();
@@ -4683,7 +4798,8 @@ function setupAutoRefresh() {
                 loadStatePendingChart(filterParams),
                 loadTimeSeriesChart(filterParams),
                 loadTopCitiesCollectionChart(filterParams),
-                loadPendingCasesByAmountChart(filterParams)
+                loadPendingCasesByAmountChart(filterParams),
+                loadLowestCollectionDates(filterParams)
             ]);
             
                 console.log('Collection without Fraud tab data refreshed successfully');
@@ -5534,6 +5650,122 @@ function populateCollectionOverTimeTable(timeSeriesData) {
     `;
 
     tbody.appendChild(totalsRow);
+}
+
+// Load lowest collection dates by month
+async function loadLowestCollectionDates(filterParams = null) {
+    const loadingEl = document.getElementById('lowestCollectionDatesLoading');
+    const tableEl = document.getElementById('lowestCollectionDatesTable');
+    const tbodyEl = document.getElementById('lowestCollectionDatesTableBody');
+    const emptyEl = document.getElementById('lowestCollectionDatesEmpty');
+    const errorEl = document.getElementById('lowestCollectionDatesError');
+    const errorMessageEl = document.getElementById('lowestCollectionDatesErrorMessage');
+    
+    try {
+        // Show loading state
+        if (loadingEl) loadingEl.classList.remove('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.add('hidden');
+        
+        // Get filter parameters
+        let params;
+        if (filterParams) {
+            params = new URLSearchParams(filterParams);
+        } else {
+            params = new URLSearchParams(window.location.search);
+        }
+        
+        // Fetch data from API
+        const response = await fetch(`/api/fraud/lowest-collection-dates/?${params}`);
+        if (!response.ok) {
+            throw new Error(`API responded with status ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        const monthlyData = data.data || [];
+        
+        // Hide loading state
+        if (loadingEl) loadingEl.classList.add('hidden');
+        
+        if (!monthlyData || monthlyData.length === 0) {
+            // Show empty state
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            if (tableEl) tableEl.classList.add('hidden');
+            return;
+        }
+        
+        // Show table and populate data
+        if (tableEl) tableEl.classList.remove('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (tbodyEl) {
+            tbodyEl.innerHTML = '';
+            
+            monthlyData.forEach(monthData => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-800 hover:bg-gray-800/30 transition-colors';
+                
+                // Format month name
+                const monthDate = new Date(monthData.month + '-01');
+                const monthName = monthDate.toLocaleDateString('en-IN', { 
+                    month: 'long', 
+                    year: 'numeric' 
+                });
+                
+                // Format dates
+                const datesList = monthData.lowest_dates.map(dateInfo => {
+                    const date = new Date(dateInfo.date);
+                    return date.toLocaleDateString('en-IN', { 
+                        day: 'numeric', 
+                        month: 'short' 
+                    });
+                }).join(', ');
+                
+                // Calculate total repayment and collected amounts for all lowest dates
+                const totalRepayment = monthData.lowest_dates.reduce((sum, d) => sum + d.repayment_amount, 0);
+                const totalCollected = monthData.lowest_dates.reduce((sum, d) => sum + d.collected_amount, 0);
+                
+                // Color code collection rate
+                let rateColorClass = 'text-red-400';
+                if (monthData.lowest_collection_rate >= 80) {
+                    rateColorClass = 'text-green-400';
+                } else if (monthData.lowest_collection_rate >= 60) {
+                    rateColorClass = 'text-yellow-400';
+                }
+                
+                row.innerHTML = `
+                    <td class="py-3 px-4 text-white font-medium">${monthName}</td>
+                    <td class="py-3 px-4 text-right ${rateColorClass} font-semibold">${monthData.lowest_collection_rate.toFixed(2)}%</td>
+                    <td class="py-3 px-4 text-gray-300">${datesList}</td>
+                    <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(totalRepayment)}</td>
+                    <td class="py-3 px-4 text-right text-gray-300">${formatCurrency(totalCollected)}</td>
+                `;
+                
+                tbodyEl.appendChild(row);
+            });
+        }
+        
+        console.log('Lowest collection dates loaded:', monthlyData.length, 'months');
+        
+    } catch (error) {
+        console.error('Error loading lowest collection dates:', error);
+        
+        // Hide loading state
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        
+        // Show error state
+        if (errorEl) errorEl.classList.remove('hidden');
+        if (errorMessageEl) {
+            errorMessageEl.textContent = error.message || 'Failed to load data. Please try again later.';
+        }
+    }
 }
 
 // ===============================
@@ -6424,10 +6656,155 @@ function renderCreditPersonChart(data) {
     });
 }
 
-function renderCreditPersonTable(data) {
+// Global variable to track sort state for Credit Person table
+let creditPersonSortState = {
+    column: null,
+    direction: null // 'asc' or 'desc'
+};
+
+// Store original data for sorting
+let creditPersonTableData = [];
+
+// Reset sort indicators
+function resetCreditPersonSortIndicators() {
+    const sortIndicators = document.querySelectorAll('.sort-indicator');
+    sortIndicators.forEach(indicator => {
+        indicator.classList.remove('active', 'asc', 'desc');
+    });
+    creditPersonSortState.column = null;
+    creditPersonSortState.direction = null;
+}
+
+// CSS for sort indicators
+if (!document.getElementById('creditPersonSortStyle')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'creditPersonSortStyle';
+    styleEl.textContent = `
+        .sort-indicator {
+            font-size: 0.75rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            display: inline-block;
+            min-width: 1rem;
+        }
+        .sort-indicator.active {
+            opacity: 1;
+            color: #60a5fa;
+        }
+        .sort-indicator.active {
+            font-size: 0;
+        }
+        .sort-indicator.asc::after {
+            content: '↑';
+            font-size: 0.75rem;
+        }
+        .sort-indicator.desc::after {
+            content: '↓';
+            font-size: 0.75rem;
+        }
+    `;
+    document.head.appendChild(styleEl);
+}
+
+function sortCreditPersonTable(column) {
+    if (!creditPersonTableData || creditPersonTableData.length === 0) {
+        return;
+    }
+
+    // Toggle sort direction if clicking the same column
+    if (creditPersonSortState.column === column) {
+        creditPersonSortState.direction = creditPersonSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        creditPersonSortState.column = column;
+        creditPersonSortState.direction = 'desc'; // Default to highest first
+    }
+
+    // Reset all sort indicators
+    const sortIndicators = document.querySelectorAll('.sort-indicator');
+    sortIndicators.forEach(indicator => {
+        indicator.classList.remove('active', 'asc', 'desc');
+    });
+
+    // Update active sort indicator
+    const indicatorMap = {
+        'loans': 'sortLoans',
+        'recovered': 'sortRecovered',
+        'notRecovered': 'sortNotRecovered',
+        'recoveryRate': 'sortRecoveryRate',
+        'loanAmount': 'sortLoanAmount',
+        'repaymentAmount': 'sortRepaymentAmount',
+        'receivedAmount': 'sortReceivedAmount',
+        'pendingAmount': 'sortPendingAmount'
+    };
+    const activeIndicator = document.getElementById(indicatorMap[column]);
+    if (activeIndicator) {
+        activeIndicator.classList.add('active', creditPersonSortState.direction);
+    }
+
+    // Sort the data
+    const sortedData = [...creditPersonTableData].sort((a, b) => {
+        let valueA, valueB;
+
+        switch(column) {
+            case 'loans':
+                valueA = a.totalLoans;
+                valueB = b.totalLoans;
+                break;
+            case 'recovered':
+                valueA = a.recoveredLoans;
+                valueB = b.recoveredLoans;
+                break;
+            case 'notRecovered':
+                valueA = a.notRecoveredLoans;
+                valueB = b.notRecoveredLoans;
+                break;
+            case 'recoveryRate':
+                valueA = a.recoveryRate || 0;
+                valueB = b.recoveryRate || 0;
+                break;
+            case 'loanAmount':
+                valueA = a.loanAmount || 0;
+                valueB = b.loanAmount || 0;
+                break;
+            case 'repaymentAmount':
+                valueA = a.repaymentAmount || 0;
+                valueB = b.repaymentAmount || 0;
+                break;
+            case 'receivedAmount':
+                valueA = a.receivedAmount || 0;
+                valueB = b.receivedAmount || 0;
+                break;
+            case 'pendingAmount':
+                valueA = a.pendingAmount || 0;
+                valueB = b.pendingAmount || 0;
+                break;
+            default:
+                return 0;
+        }
+
+        if (creditPersonSortState.direction === 'asc') {
+            return valueA - valueB;
+        } else {
+            return valueB - valueA;
+        }
+    });
+
+    // Re-render table with sorted data
+    renderCreditPersonTable(sortedData, true);
+}
+
+function renderCreditPersonTable(data, isSorted = false) {
     const tbody = document.getElementById('creditPersonTableBody');
     if (!tbody) {
         return;
+    }
+
+    // Store data for sorting
+    creditPersonTableData = data;
+
+    // Reset sort indicators if this is fresh data (not a sort operation)
+    if (!isSorted) {
+        resetCreditPersonSortIndicators();
     }
 
     tbody.innerHTML = '';
@@ -7465,9 +7842,9 @@ async function loadAumData(silentRefresh = false, tillDate = null) {
         // Check if we have monthly data (the API doesn't return a 'success' field)
         if (!data.monthly_data || data.monthly_data.length === 0) {
             if (!silentRefresh) {
-                if (errorEl) {
-                    errorEl.classList.remove('hidden');
-                    document.getElementById('aumErrorMessage').textContent = 'No data available';
+            if (errorEl) {
+                errorEl.classList.remove('hidden');
+                document.getElementById('aumErrorMessage').textContent = 'No data available';
                 }
             }
             return;
@@ -7746,7 +8123,7 @@ function updateAumTable(monthlyData, totalData) {
     monthlyData.forEach((item, index) => {
         const isLast = index === monthlyData.length - 1;
         const aumUnits = item.running_units || 0;
-        const aumSum = item.aum_sum || item.running_sum || 0;
+        const aumSum = item.running_sum || 0;
         const bgColor = index % 2 === 0 ? 'from-blue-600/80 to-indigo-600/80' : 'from-indigo-600/80 to-purple-600/80';
         row.innerHTML += `
             <td class="py-4 px-4 text-center text-white font-bold border-r border-blue-500/30 bg-gradient-to-br ${bgColor} shadow-inner font-mono text-sm">${formatAumNumber(aumUnits)}</td>
@@ -7841,14 +8218,14 @@ function updateAumTable(monthlyData, totalData) {
     // Total Loan Book Aum - Highlighted with blue gradient like header
     if (totalData) {
         // Check for aum_sum first, then running_sum as fallback
-        const totalValue = totalData.aum_sum || totalData.running_sum || null;
+        const totalValue = totalData.running_sum || null;
         if (totalValue !== null && totalValue !== undefined) {
         const totalRow = document.createElement('tr');
         totalRow.className = 'border-t-2 border-blue-500/60 hover:bg-blue-500/10 transition-colors duration-150';
             totalRow.innerHTML = `<td class="py-4 px-5 text-left text-white font-bold text-base border-r border-blue-500/30 bg-gradient-to-br from-blue-600/80 to-blue-700/80 shadow-inner">Total Loan Book Aum</td><td colspan="${monthlyData.length * 2}" class="py-4 px-5 text-center text-white font-bold text-lg font-mono bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-600/80 shadow-inner">${formatAumNumber(totalValue)}</td>`;
         tbody.appendChild(totalRow);
         } else {
-            console.warn('AUM total_data exists but no aum_sum or running_sum found:', totalData);
+            console.warn('AUM total_data exists but no running_sum found:', totalData);
         }
     } else {
         console.warn('AUM total_data is missing from API response');
@@ -9737,14 +10114,54 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <thead>
                                     <tr class="border-b border-gray-800 text-gray-300 text-sm">
                                         <th class="py-3 px-4 text-left font-medium">Credit Person</th>
-                                        <th class="py-3 px-4 text-right font-medium">Loans</th>
-                                        <th class="py-3 px-4 text-right font-medium">Recovered</th>
-                                        <th class="py-3 px-4 text-right font-medium">Not Recovered</th>
-                                        <th class="py-3 px-4 text-right font-medium">Recovery %</th>
-                                        <th class="py-3 px-4 text-right font-medium">Loan Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Repayment Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Collected Amount</th>
-                                        <th class="py-3 px-4 text-right font-medium">Pending Amount</th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('loans')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Loans</span>
+                                                <span id="sortLoans" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('recovered')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Recovered</span>
+                                                <span id="sortRecovered" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('notRecovered')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Not Recovered</span>
+                                                <span id="sortNotRecovered" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('recoveryRate')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Recovery %</span>
+                                                <span id="sortRecoveryRate" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('loanAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Loan Amount</span>
+                                                <span id="sortLoanAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('repaymentAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Repayment Amount</span>
+                                                <span id="sortRepaymentAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('receivedAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Collected Amount</span>
+                                                <span id="sortReceivedAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
+                                        <th class="py-3 px-4 text-right font-medium cursor-pointer hover:text-white transition-colors select-none" onclick="sortCreditPersonTable('pendingAmount')">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <span>Pending Amount</span>
+                                                <span id="sortPendingAmount" class="sort-indicator">⇅</span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody id="creditPersonTableBody">

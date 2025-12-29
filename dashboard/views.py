@@ -163,16 +163,16 @@ def calculate_kpi_from_records(records):
     fresh_pending_amount = fresh_repayment_amount - fresh_collected_amount
     reloan_pending_amount = reloan_repayment_amount - reloan_collected_amount
     
-    # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+    # Calculate principal outstanding (SUM(loan_amount) - SUM(total_received) WHERE closed_status = 'Not Closed')
     not_closed_records = [r for r in records if r.get('closed_status') == 'Not Closed']
     not_closed_fresh_records = [r for r in fresh_records if r.get('closed_status') == 'Not Closed']
     not_closed_reloan_records = [r for r in reloan_records if r.get('closed_status') == 'Not Closed']
     
-    principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_records)
+    principal_outstanding = sum(safe_decimal_conversion(r.get('loan_amount')) for r in not_closed_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_records)
     
-    fresh_principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_fresh_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_fresh_records)
+    fresh_principal_outstanding = sum(safe_decimal_conversion(r.get('loan_amount')) for r in not_closed_fresh_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_fresh_records)
     
-    reloan_principal_outstanding = sum(safe_decimal_conversion(r.get('net_disbursal')) for r in not_closed_reloan_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_reloan_records)
+    reloan_principal_outstanding = sum(safe_decimal_conversion(r.get('loan_amount')) for r in not_closed_reloan_records) - sum(safe_decimal_conversion(r.get('total_received')) for r in not_closed_reloan_records)
     
     # Calculate percentages
     fresh_percentage = round((fresh_cases / total_applications) * 100, 2) if total_applications > 0 else 0
@@ -340,24 +340,24 @@ def get_kpi_data(queryset):
     fresh_pending_amount = (fresh_amounts['fresh_repayment'] or 0) - (fresh_amounts['fresh_collected'] or 0)
     reloan_pending_amount = (reloan_amounts['reloan_repayment'] or 0) - (reloan_amounts['reloan_collected'] or 0)
     
-    # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+    # Calculate principal outstanding (SUM(loan_amount) - SUM(total_received) WHERE closed_status = 'Not Closed')
     not_closed_queryset = queryset.filter(closed_status='Not Closed')
     
     not_closed_totals = not_closed_queryset.aggregate(
-        total_disbursal=Sum('net_disbursal'),
+        total_disbursal=Sum('loan_amount'),
         total_received=Sum('total_received')
     )
     principal_outstanding_amount = (not_closed_totals['total_disbursal'] or Decimal('0')) - (not_closed_totals['total_received'] or Decimal('0'))
     
     # Calculate fresh and reloan principal outstanding amounts (only Not Closed records)
     fresh_not_closed = not_closed_queryset.filter(reloan_status='Freash').aggregate(
-        total_disbursal=Sum('net_disbursal'),
+        total_disbursal=Sum('loan_amount'),
         total_received=Sum('total_received')
     )
     fresh_principal_outstanding = (fresh_not_closed['total_disbursal'] or Decimal('0')) - (fresh_not_closed['total_received'] or Decimal('0'))
     
     reloan_not_closed = not_closed_queryset.filter(reloan_status='Reloan').aggregate(
-        total_disbursal=Sum('net_disbursal'),
+        total_disbursal=Sum('loan_amount'),
         total_received=Sum('total_received')
     )
     reloan_principal_outstanding = (reloan_not_closed['total_disbursal'] or Decimal('0')) - (reloan_not_closed['total_received'] or Decimal('0'))
@@ -1718,14 +1718,14 @@ def api_fraud_kpi_data(request):
         interest_amount = sum(Decimal(str(record.get('interest_amount', 0))) for record in records)
         total_received = sum(Decimal(str(record.get('total_received', 0))) for record in records)
         
-        # Calculate principal outstanding (SUM(net_disbursal) - SUM(total_received) WHERE closed_status = 'Not Closed')
+        # Calculate principal outstanding (SUM(loan_amount) - SUM(total_received) WHERE closed_status = 'Not Closed')
         not_closed_records = [r for r in records if r.get('closed_status') == 'Not Closed']
         not_closed_fresh_records = [r for r in fresh_records if r.get('closed_status') == 'Not Closed']
         not_closed_reloan_records = [r for r in reloan_records if r.get('closed_status') == 'Not Closed']
         
-        principal_outstanding_amount = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_records)
-        fresh_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_fresh_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_fresh_records)
-        reloan_principal_outstanding = sum(Decimal(str(r.get('net_disbursal', 0))) for r in not_closed_reloan_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_reloan_records)
+        principal_outstanding_amount = sum(Decimal(str(r.get('loan_amount', 0))) for r in not_closed_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_records)
+        fresh_principal_outstanding = sum(Decimal(str(r.get('loan_amount', 0))) for r in not_closed_fresh_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_fresh_records)
+        reloan_principal_outstanding = sum(Decimal(str(r.get('loan_amount', 0))) for r in not_closed_reloan_records) - sum(Decimal(str(r.get('total_received', 0))) for r in not_closed_reloan_records)
         
         earning = processing_fee + interest_amount
         penalty = Decimal('0')  # Assuming no penalty data in this API
@@ -1947,6 +1947,138 @@ def api_fraud_time_series(request):
         time_series_data.sort(key=lambda x: x['date'])
         
         return JsonResponse({'data': time_series_data})
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@no_cache_api
+def api_fraud_lowest_collection_dates(request):
+    """API endpoint to find dates with lowest collection % for each month"""
+    try:
+        # Fetch data from the without-fraud API
+        response = requests.get(settings.EXTERNAL_API_URL_WITHOUT_FRAUD, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract the data array
+        records = data.get('cwpr', [])
+        
+        # Apply filters if provided
+        records = apply_fraud_filters(records, request)
+
+        if not records:
+            return JsonResponse({'data': []})
+        
+        # Group by repayment_date and calculate collection % as of repayment date
+        # For each repayment_date, we calculate collection % based on:
+        # - All records that have this repayment_date (loans due on this date)
+        # - total_received can be from payments made before OR after repayment_date (doesn't matter)
+        # - Collection % = (sum of total_received) / (sum of repayment_amount) * 100
+        # This shows: for loans due on this date, what % has been collected (regardless of when payment was received)
+        date_data = {}
+        for record in records:
+            repayment_date_str = record.get('repayment_date')
+            if not repayment_date_str:
+                continue
+                
+            try:
+                repayment_date = parse_datetime_safely(repayment_date_str)
+                if not repayment_date:
+                    continue
+                if isinstance(repayment_date, datetime):
+                    repayment_date = repayment_date.date()
+                date_key = repayment_date.strftime('%Y-%m-%d')
+                
+                repayment_amount = Decimal(str(record.get('repayment_amount', 0)))
+                total_received = Decimal(str(record.get('total_received', 0)))
+                
+                # Skip records with zero or negative repayment amount
+                if repayment_amount <= 0:
+                    continue
+                
+                # Initialize date entry if it doesn't exist
+                if date_key not in date_data:
+                    date_data[date_key] = {
+                        'date': date_key,
+                        'repayment_amount': Decimal('0'),
+                        'collected_amount': Decimal('0')
+                    }
+                
+                # Accumulate repayment_amount and total_received for all records with this repayment_date
+                # Note: total_received is cumulative and includes payments received before/on/after repayment_date
+                # We're calculating: for all loans due on this date, what % has been collected (as of now)
+                date_data[date_key]['repayment_amount'] += repayment_amount
+                date_data[date_key]['collected_amount'] += total_received
+                
+            except Exception as e:
+                logger.error(f"Error processing record for date calculation: {e}")
+                continue
+        
+        # Calculate collection % for each repayment date
+        # Collection % = (total collected amount / total repayment amount) * 100
+        # This represents: for all loans due on this repayment_date, what percentage has been collected
+        # (regardless of when the payment was actually received - pre or post repayment date)
+        for date_info in date_data.values():
+            repayment_amount = float(date_info['repayment_amount'])
+            collected_amount = float(date_info['collected_amount'])
+            
+            # Calculate collection percentage
+            if repayment_amount > 0:
+                date_info['collection_rate'] = round((collected_amount / repayment_amount) * 100, 2)
+            else:
+                date_info['collection_rate'] = 0.0
+        
+        # Group by month and find lowest collection % dates
+        monthly_data = {}
+        for date_key, date_info in date_data.items():
+            date_obj = datetime.strptime(date_key, '%Y-%m-%d').date()
+            month_key = date_obj.strftime('%Y-%m')  # e.g., '2024-01'
+            
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {
+                    'month': month_key,
+                    'lowest_collection_rate': float('inf'),
+                    'lowest_dates': [],
+                    'all_dates': []
+                }
+            
+            collection_rate = date_info['collection_rate']
+            monthly_data[month_key]['all_dates'].append({
+                'date': date_key,
+                'collection_rate': collection_rate,
+                'repayment_amount': float(date_info['repayment_amount']),
+                'collected_amount': float(date_info['collected_amount'])
+            })
+            
+            # Track lowest collection rate
+            if collection_rate < monthly_data[month_key]['lowest_collection_rate']:
+                monthly_data[month_key]['lowest_collection_rate'] = collection_rate
+                monthly_data[month_key]['lowest_dates'] = [{
+                    'date': date_key,
+                    'collection_rate': collection_rate,
+                    'repayment_amount': float(date_info['repayment_amount']),
+                    'collected_amount': float(date_info['collected_amount'])
+                }]
+            elif collection_rate == monthly_data[month_key]['lowest_collection_rate']:
+                monthly_data[month_key]['lowest_dates'].append({
+                    'date': date_key,
+                    'collection_rate': collection_rate,
+                    'repayment_amount': float(date_info['repayment_amount']),
+                    'collected_amount': float(date_info['collected_amount'])
+                })
+        
+        # Convert to list and format
+        result_data = []
+        for month_info in sorted(monthly_data.values(), key=lambda x: x['month'], reverse=True):
+            if month_info['lowest_collection_rate'] != float('inf'):
+                result_data.append({
+                    'month': month_info['month'],
+                    'lowest_collection_rate': round(month_info['lowest_collection_rate'], 2),
+                    'lowest_dates': month_info['lowest_dates']
+                })
+        
+        return JsonResponse({'data': result_data})
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
