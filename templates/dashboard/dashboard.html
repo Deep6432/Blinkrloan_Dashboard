@@ -1140,68 +1140,6 @@ if (window.history.replaceState) {
             </div>
         </div>
 
-        <!-- Lowest Collection % Dates by Month -->
-        <div class="chart-container rounded-2xl p-8 shadow-2xl">
-            <!-- Header Block -->
-            <div class="flex items-center gap-4 mb-8">
-                <div class="p-3 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 shadow-lg">
-                    <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-xl font-bold text-foreground">Lowest Collection % Dates by Month</h3>
-                    <p class="text-sm text-muted-foreground font-medium">Dates with lowest collection percentage for each month</p>
-                </div>
-            </div>
-            
-            <!-- Loading State -->
-            <div id="lowestCollectionDatesLoading" class="text-center py-8">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-red-500/30 border-t-red-500"></div>
-                <p class="mt-4 text-gray-400 font-medium">Loading lowest collection dates...</p>
-            </div>
-            
-            <!-- Table -->
-            <div id="lowestCollectionDatesTable" class="hidden w-full overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="border-b border-border">
-                            <th class="text-left py-3 px-4 font-medium text-muted-foreground">Month</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Lowest Collection %</th>
-                            <th class="text-left py-3 px-4 font-medium text-muted-foreground">Date(s)</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Repayment Amount</th>
-                            <th class="text-right py-3 px-4 font-medium text-muted-foreground">Collected Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody id="lowestCollectionDatesTableBody">
-                        <!-- Rows will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Empty State -->
-            <div id="lowestCollectionDatesEmpty" class="hidden text-center py-12">
-                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-500/10 border border-gray-500/20 mb-4">
-                    <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                    </svg>
-                </div>
-                <p class="text-gray-400 text-lg font-semibold mb-2">No data available</p>
-                <p class="text-gray-500 text-sm">No collection data found for the selected filters.</p>
-            </div>
-            
-            <!-- Error State -->
-            <div id="lowestCollectionDatesError" class="hidden text-center py-12">
-                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 mb-4">
-                    <svg class="h-8 w-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-                <p class="text-red-400 text-lg font-semibold mb-2">Error loading data</p>
-                <p class="text-gray-400 text-sm" id="lowestCollectionDatesErrorMessage"></p>
-            </div>
-        </div>
-                
         <!-- Mobile Responsive City-wise Analysis Charts -->
         <!-- Top Cities - Collection Rate Chart -->
         <div class="chart-container rounded-2xl p-4 sm:p-8 shadow-2xl mt-6 sm:mt-8">
@@ -3072,7 +3010,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadStatePendingChart();
     loadTimeSeriesChart();
     loadTopCitiesCollectionChart();
-    loadLowestCollectionDates();
     
     // Only load pending cases chart if collection tab is active
     if (activeTab === 'collection') {
@@ -4807,8 +4744,7 @@ function setupAutoRefresh() {
                 loadStatePendingChart(filterParams),
                 loadTimeSeriesChart(filterParams),
                 loadTopCitiesCollectionChart(filterParams),
-                loadPendingCasesByAmountChart(filterParams),
-                loadLowestCollectionDates(filterParams)
+                loadPendingCasesByAmountChart(filterParams)
             ]);
             
                 console.log('Collection without Fraud tab data refreshed successfully');
