@@ -180,6 +180,11 @@
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
         Chart.defaults.backgroundColor = '#334155';
+        
+        // Register ChartDataLabels plugin if available
+        if (typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
     </script>
 </body>
 </html>

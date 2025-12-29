@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/fraud/dpd-buckets/', views.api_fraud_dpd_buckets, name='api_fraud_dpd_buckets'),
     path('api/fraud/state-repayment/', views.api_fraud_state_repayment, name='api_fraud_state_repayment'),
     path('api/fraud/time-series/', views.api_fraud_time_series, name='api_fraud_time_series'),
+    path('api/fraud/lowest-collection-dates/', views.api_fraud_lowest_collection_dates, name='api_fraud_lowest_collection_dates'),
     path('api/fraud/city-collected/', views.api_fraud_city_collected, name='api_fraud_city_collected'),
     path('api/fraud/city-uncollected/', views.api_fraud_city_uncollected, name='api_fraud_city_uncollected'),
     path('api/fraud/total-applications-details/', views.api_fraud_total_applications_details, name='api_fraud_total_applications_details'),
@@ -37,4 +38,6 @@ urlpatterns = [
     path('api/disbursal-summary/', views.api_disbursal_summary, name='api_disbursal_summary'),
     # Daily Performance Metrics API endpoint
     path('api/daily-performance-metrics/', views.api_daily_performance_metrics, name='api_daily_performance_metrics'),
+    # AUM Report API endpoint
+    path('api/aum-report/', views.api_aum_report, name='api_aum_report'),
 ]
