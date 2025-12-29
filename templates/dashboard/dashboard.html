@@ -298,6 +298,20 @@ if (window.history.replaceState) {
                 </div>
             </div>
 
+            <!-- Export Button -->
+            <div class="mb-4 flex justify-end">
+                <button 
+                    onclick="exportDisbursalSummary()"
+                    class="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors shadow-md hover:shadow-lg"
+                    title="Export to Excel"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    Export to Excel
+                </button>
+            </div>
+
             <!-- Summary Cards -->
             <div id="disbursalSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-6 hidden">
                 <div class="card">
@@ -7022,6 +7036,8 @@ async function loadDisbursalData() {
         // Update summary cards
         if (data.summary) {
             updateDisbursalSummaryCards(data.summary);
+            // Store data globally for Excel export
+            window.disbursalSummaryData = data;
         }
         
         // Update pie charts
@@ -7178,6 +7194,161 @@ function updateDisbursalSummaryCards(summary) {
     document.getElementById('disbursalRepaymentAmount').textContent = formatCurrency(summary.total_repayment_amount || 0);
     document.getElementById('disbursalFreshRepaymentAmount').textContent = formatCurrency(summary.fresh_repayment_amount || 0);
     document.getElementById('disbursalReloanRepaymentAmount').textContent = formatCurrency(summary.reloan_repayment_amount || 0);
+}
+
+// Export Disbursal Summary to Excel
+async function exportDisbursalSummary() {
+    try {
+        // Check if ExcelJS is loaded, if not load it
+        if (typeof ExcelJS === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+            script.onload = () => exportDisbursalSummary();
+            document.head.appendChild(script);
+            return;
+        }
+        
+        // Get current data from stored global variable or fetch fresh
+        let data = window.disbursalSummaryData;
+        if (!data || !data.summary) {
+            // Fetch fresh data with current filters
+            const params = new URLSearchParams();
+            const startDate = document.getElementById('disbursalStartDate')?.value;
+            const endDate = document.getElementById('disbursalEndDate')?.value;
+            const state = document.getElementById('disbursalStateFilter')?.value;
+            const city = document.getElementById('disbursalCityFilter')?.value;
+            const reloan = document.getElementById('disbursalReloanFilter')?.value;
+            const tenure = document.getElementById('disbursalTenureFilter')?.value;
+            
+            if (startDate) params.append('date_from', startDate);
+            if (endDate) params.append('date_to', endDate);
+            if (state) params.append('state', state);
+            if (city) params.append('city', city);
+            if (reloan) params.append('is_reloan', reloan);
+            if (tenure) params.append('tenure', tenure);
+            
+            const response = await fetch(`/api/disbursal-summary/?${params.toString()}`);
+            if (!response.ok) throw new Error('Failed to fetch data');
+            data = await response.json();
+        }
+        
+        const summary = data.summary;
+        if (!summary) {
+            throw new Error('No summary data available');
+        }
+        
+        // Get current date for report
+        const today = new Date();
+        const reportDate = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        // Create workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Disbursal Summary');
+        
+        // Define border style
+        const borderStyle = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+        
+        let rowIndex = 1;
+        
+        // Title
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 4);
+        const titleCell = worksheet.getCell(rowIndex, 1);
+        titleCell.value = 'DISBURSAL SUMMARY REPORT';
+        titleCell.font = { bold: true, size: 16 };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        titleCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+        };
+        titleCell.font.color = { argb: 'FFFFFFFF' };
+        rowIndex += 2;
+        
+        // Report Date
+        const dateCell = worksheet.getCell(rowIndex, 1);
+        dateCell.value = `Report Date: ${reportDate}`;
+        dateCell.font = { bold: true };
+        rowIndex += 2;
+        
+        // Summary Section Header
+        worksheet.mergeCells(rowIndex, 1, rowIndex, 4);
+        const summaryHeader = worksheet.getCell(rowIndex, 1);
+        summaryHeader.value = 'Summary';
+        summaryHeader.font = { bold: true, size: 14 };
+        summaryHeader.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD9E1F2' }
+        };
+        rowIndex++;
+        
+        // Summary Data
+        const summaryData = [
+            ['Metric', 'Total', 'Fresh', 'Reloan'],
+            ['Total Records', summary.total_records || 0, summary.fresh_count || 0, summary.reloan_count || 0],
+            ['Total Loan Amount', summary.total_loan_amount || 0, summary.fresh_loan_amount || 0, summary.reloan_loan_amount || 0],
+            ['Total Disbursal Amount', summary.total_disbursal_amount || 0, summary.fresh_disbursal_amount || 0, summary.reloan_disbursal_amount || 0],
+            ['Processing Fee', summary.total_processing_fee || 0, summary.fresh_processing_fee || 0, summary.reloan_processing_fee || 0],
+            ['Interest Amount', summary.total_interest_amount || 0, summary.fresh_interest_amount || 0, summary.reloan_interest_amount || 0],
+            ['Repayment Amount', summary.total_repayment_amount || 0, summary.fresh_repayment_amount || 0, summary.reloan_repayment_amount || 0]
+        ];
+        
+        summaryData.forEach((row, idx) => {
+            row.forEach((cellValue, colIdx) => {
+                const cell = worksheet.getCell(rowIndex, colIdx + 1);
+                cell.value = cellValue;
+                cell.border = borderStyle;
+                
+                if (idx === 0) {
+                    // Header row
+                    cell.font = { bold: true };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFE7E6E6' }
+                    };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                } else {
+                    // Data rows
+                    if (colIdx > 0 && typeof cellValue === 'number') {
+                        cell.numFmt = '#,##0.00';
+                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    } else {
+                        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    }
+                }
+            });
+            rowIndex++;
+        });
+        
+        // Set column widths
+        worksheet.getColumn(1).width = 25;
+        worksheet.getColumn(2).width = 20;
+        worksheet.getColumn(3).width = 20;
+        worksheet.getColumn(4).width = 20;
+        
+        // Generate Excel file
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Disbursal_Summary_${reportDate.replace(/\s/g, '_')}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('Disbursal Summary exported successfully');
+    } catch (error) {
+        console.error('Error exporting disbursal summary:', error);
+        alert('Failed to export disbursal summary: ' + error.message + '\n\nPlease check the browser console for more details.');
+    }
 }
 
 function updateDisbursalTable(records, pagination) {
