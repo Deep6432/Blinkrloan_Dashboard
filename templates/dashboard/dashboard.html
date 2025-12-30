@@ -361,7 +361,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Summary Cards -->
-            <div id="disbursalSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-6 hidden">
+            <div id="disbursalSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-6">
                 <div class="card">
                     <div class="p-6">
                         <div class="flex items-center justify-between mb-2">
@@ -467,7 +467,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Pie Charts -->
-            <div id="disbursalCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 hidden">
+            <div id="disbursalCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <!-- State Pie Chart -->
                 <div class="card">
                     <div class="p-6">
@@ -524,7 +524,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Data Table -->
-            <div id="disbursalTableWrapper" class="card hidden">
+            <div id="disbursalTableWrapper" class="card">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-white">Disbursal Records</h3>
@@ -3177,13 +3177,12 @@ async function loadDailyPerformanceData(silentRefresh = false) {
     try {
         console.log('Loading daily performance metrics data...');
         
-        // Show loading state only on initial load, not during auto-refresh
+        // Never show loading screen - keep all elements visible at all times
         const loadingEl = document.getElementById('dailyPerformanceLoading');
         const mainContentEl = document.getElementById('dailyPerformanceMainContent');
-        if (!silentRefresh) {
-            if (loadingEl) loadingEl.classList.remove('hidden');
-            if (mainContentEl) mainContentEl.classList.add('hidden');
-        }
+        // Always hide loading and keep main content visible
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (mainContentEl) mainContentEl.classList.remove('hidden');
         
         // Fetch data from API
         const response = await fetch('/api/daily-performance-metrics/');
@@ -3198,12 +3197,6 @@ async function loadDailyPerformanceData(silentRefresh = false) {
         window.dailyPerformanceData = data;
         
         console.log('Daily performance data received:', data);
-        
-        // Hide loading state and show main content (only if we showed it)
-        if (!silentRefresh) {
-            if (loadingEl) loadingEl.classList.add('hidden');
-            if (mainContentEl) mainContentEl.classList.remove('hidden');
-        }
         
         // Update position date - always use today's date (local timezone)
         const positionDateEl = document.getElementById('positionDate');
@@ -3230,6 +3223,8 @@ async function loadDailyPerformanceData(silentRefresh = false) {
                 const targetValue = sp.monthly_target || 120000000;
                 const formattedValue = formatNumberWithCommas(targetValue);
                 monthlyTargetInput.value = formattedValue;
+            } else {
+                console.warn('monthlyTargetInput element not found');
             }
             
             // Update Today's Disbursement
@@ -3241,14 +3236,29 @@ async function loadDailyPerformanceData(silentRefresh = false) {
             } else {
                 console.error('todayDisbursement element not found');
             }
-            document.getElementById('totalAchieved').textContent = formatCurrency(sp.total_achieved || 0);
-            document.getElementById('achievementPercentage').textContent = (sp.achievement_percentage || 0).toFixed(2);
-            document.getElementById('yetToAchieve').textContent = formatCurrency(sp.yet_to_achieve || 0);
-            document.getElementById('yetToAchievePercentage').textContent = (sp.yet_to_achieve_percentage || 0).toFixed(2);
-            document.getElementById('daysCompleted').textContent = sp.days_completed || 0;
-            document.getElementById('remainingDays').textContent = sp.remaining_days || 0;
-            document.getElementById('currentDailyPerformance').textContent = formatCurrency(sp.current_daily_performance || 0);
-            document.getElementById('requiredDailyPerformance').textContent = formatCurrency(sp.required_daily_performance || 0);
+            const totalAchievedEl = document.getElementById('totalAchieved');
+            if (totalAchievedEl) totalAchievedEl.textContent = formatCurrency(sp.total_achieved || 0);
+            
+            const achievementPercentageEl = document.getElementById('achievementPercentage');
+            if (achievementPercentageEl) achievementPercentageEl.textContent = (sp.achievement_percentage || 0).toFixed(2);
+            
+            const yetToAchieveEl = document.getElementById('yetToAchieve');
+            if (yetToAchieveEl) yetToAchieveEl.textContent = formatCurrency(sp.yet_to_achieve || 0);
+            
+            const yetToAchievePercentageEl = document.getElementById('yetToAchievePercentage');
+            if (yetToAchievePercentageEl) yetToAchievePercentageEl.textContent = (sp.yet_to_achieve_percentage || 0).toFixed(2);
+            
+            const daysCompletedEl = document.getElementById('daysCompleted');
+            if (daysCompletedEl) daysCompletedEl.textContent = sp.days_completed || 0;
+            
+            const remainingDaysEl = document.getElementById('remainingDays');
+            if (remainingDaysEl) remainingDaysEl.textContent = sp.remaining_days || 0;
+            
+            const currentDailyPerformanceEl = document.getElementById('currentDailyPerformance');
+            if (currentDailyPerformanceEl) currentDailyPerformanceEl.textContent = formatCurrency(sp.current_daily_performance || 0);
+            
+            const requiredDailyPerformanceEl = document.getElementById('requiredDailyPerformance');
+            if (requiredDailyPerformanceEl) requiredDailyPerformanceEl.textContent = formatCurrency(sp.required_daily_performance || 0);
         }
         
         // Update Collection Efficiency section
@@ -3263,7 +3273,8 @@ async function loadDailyPerformanceData(silentRefresh = false) {
                     (efficiency >= ce.benchmark_efficiency ? 'bg-green-600' : 
                      efficiency >= ce.benchmark_efficiency * 0.8 ? 'bg-yellow-600' : 'bg-red-600');
             }
-            document.getElementById('benchmarkEfficiency').textContent = (ce.benchmark_efficiency || 0).toFixed(0);
+            const benchmarkEfficiencyEl = document.getElementById('benchmarkEfficiency');
+            if (benchmarkEfficiencyEl) benchmarkEfficiencyEl.textContent = (ce.benchmark_efficiency || 0).toFixed(0);
         }
         
         // Update Historical Collection Efficiency table
@@ -3310,11 +3321,12 @@ async function loadDailyPerformanceData(silentRefresh = false) {
         
     } catch (error) {
         console.error('Error loading daily performance data:', error);
+        // Keep elements visible even on error
         const loadingEl = document.getElementById('dailyPerformanceLoading');
         const mainContentEl = document.getElementById('dailyPerformanceMainContent');
         if (loadingEl) loadingEl.classList.add('hidden');
         if (mainContentEl) mainContentEl.classList.remove('hidden');
-        // Show error message
+        // Show error message but keep content visible
         alert('Failed to load daily performance metrics. Please try again.');
     }
 }
@@ -4857,6 +4869,10 @@ function setupAutoRefresh() {
             } else if (activeTab === 'creditPerson') {
                 await loadCreditPersonData();
                 console.log('Credit Person Wise tab data refreshed successfully');
+            } else if (activeTab === 'disbursal') {
+                // Refresh Disbursal Summary tab (silent refresh - no loading screen)
+                await loadDisbursalData(true);
+                console.log('Disbursal Summary tab data refreshed successfully');
             } else if (activeTab === 'aumReport') {
                 // Refresh AUM Report tab (silent refresh - no loading screen)
                 // Get current active button state to maintain filter
@@ -6280,20 +6296,29 @@ async function loadCreditPersonData() {
     const { startDate, endDate } = getCreditPersonDateRange();
     const loanType = getCreditPersonLoanType();
 
-    loadingEl?.classList.remove('hidden');
+    // Never show loading screen - keep all elements visible at all times
+    loadingEl?.classList.add('hidden');
     errorEl?.classList.add('hidden');
-    noDataEl?.classList.add('hidden');
-    dataSectionEl?.classList.add('hidden');
+    // Keep data section always visible
+    dataSectionEl?.classList.remove('hidden');
 
     if (!startDate || !endDate) {
-        loadingEl?.classList.add('hidden');
+        if (!errorMessageEl) {
         alert('Please select both start and end dates for Credit Person Wise data.');
+        } else {
+            errorMessageEl.textContent = 'Please select both start and end dates for Credit Person Wise data.';
+            errorEl?.classList.remove('hidden');
+        }
         return;
     }
 
     if (new Date(startDate) > new Date(endDate)) {
-        loadingEl?.classList.add('hidden');
+        if (!errorMessageEl) {
         alert('Start date must be before end date for Credit Person Wise data.');
+        } else {
+            errorMessageEl.textContent = 'Start date must be before end date for Credit Person Wise data.';
+            errorEl?.classList.remove('hidden');
+        }
         return;
     }
 
@@ -6338,19 +6363,20 @@ async function loadCreditPersonData() {
             return;
         }
 
+        // Update values - elements remain visible
         renderCreditPersonSummary(aggregated);
         renderCreditPersonChart(aggregated);
         renderCreditPersonTable(aggregated);
 
-        dataSectionEl?.classList.remove('hidden');
+        // Hide no data message if we have data
+        noDataEl?.classList.add('hidden');
     } catch (error) {
         console.error('Error loading credit person data:', error);
         if (errorMessageEl) {
             errorMessageEl.textContent = error.message || 'Failed to load data. Please try again later.';
         }
         errorEl?.classList.remove('hidden');
-    } finally {
-        loadingEl?.classList.add('hidden');
+        // Keep data section visible even on error
     }
 }
 
@@ -6983,7 +7009,7 @@ function handleDisbursalDateChange() {
     }
 }
 
-async function loadDisbursalData() {
+async function loadDisbursalData(silentRefresh = false) {
     try {
         const startDateInput = document.getElementById('disbursalStartDate');
         const endDateInput = document.getElementById('disbursalEndDate');
@@ -7008,7 +7034,9 @@ async function loadDisbursalData() {
         
         if (!startDate || !endDate) {
             console.error('Dates still not set after default');
+            if (!silentRefresh) {
             alert('Please select both start and end dates');
+            }
             return;
         }
         
@@ -7040,13 +7068,15 @@ async function loadDisbursalData() {
         
         console.log('Fetching from API with params:', params.toString());
         
-        // Show loading state
-        document.getElementById('disbursalLoading').classList.remove('hidden');
+        // Never show loading screen - keep all elements visible at all times
+        // Only hide error state
+        document.getElementById('disbursalLoading').classList.add('hidden');
         document.getElementById('disbursalError').classList.add('hidden');
-        document.getElementById('disbursalSummaryCards').classList.add('hidden');
-        document.getElementById('disbursalCharts').classList.add('hidden');
-        document.getElementById('disbursalTableWrapper').classList.add('hidden');
-        document.getElementById('disbursalNoData').classList.add('hidden');
+        
+        // Ensure cards, charts, and table are visible (show them if hidden)
+        document.getElementById('disbursalSummaryCards').classList.remove('hidden');
+        document.getElementById('disbursalCharts').classList.remove('hidden');
+        document.getElementById('disbursalTableWrapper').classList.remove('hidden');
         
         const apiUrl = `/api/disbursal-summary/?${params.toString()}`;
         console.log('Fetching disbursal data from:', apiUrl);
@@ -7073,20 +7103,17 @@ async function loadDisbursalData() {
             throw new Error(data.error);
         }
         
-        // Hide loading state
-        document.getElementById('disbursalLoading').classList.add('hidden');
-        
         // Update filter dropdowns with available options
         if (data.filters) {
             updateDisbursalFilterOptions(data.filters);
         }
         
-        // Update summary cards
+        // Update summary cards (always visible, just update values)
         if (data.summary) {
             updateDisbursalSummaryCards(data.summary);
         }
         
-        // Update pie charts
+        // Update pie charts (always visible, just update data)
         if (data.chart_data) {
             if (data.chart_data.state && data.chart_data.state.length > 0) {
                 updateDisbursalStateChart(data.chart_data.state);
@@ -7094,34 +7121,26 @@ async function loadDisbursalData() {
             if (data.chart_data.city && data.chart_data.city.length > 0) {
                 updateDisbursalCityChart(data.chart_data.city);
             }
-            document.getElementById('disbursalCharts').classList.remove('hidden');
-        } else {
-            document.getElementById('disbursalCharts').classList.add('hidden');
         }
         
-        // Update table
+        // Update table (always visible, just update data)
         updateDisbursalTable(data.records, data.pagination);
         
-        // Show data sections
+        // Always keep cards, charts, and table visible - only update values
+        // Show/hide no data message based on records
         if (data.records && data.records.length > 0) {
-            document.getElementById('disbursalSummaryCards').classList.remove('hidden');
-            document.getElementById('disbursalTableWrapper').classList.remove('hidden');
             document.getElementById('disbursalNoData').classList.add('hidden');
         } else {
-            document.getElementById('disbursalSummaryCards').classList.add('hidden');
-            document.getElementById('disbursalTableWrapper').classList.add('hidden');
             document.getElementById('disbursalNoData').classList.remove('hidden');
         }
         
     } catch (error) {
         console.error('Error loading disbursal data:', error);
+        // Show error but keep all elements visible
         document.getElementById('disbursalLoading').classList.add('hidden');
         document.getElementById('disbursalError').classList.remove('hidden');
         document.getElementById('disbursalErrorMessage').textContent = error.message || 'Failed to load disbursal data. Please try again.';
-        document.getElementById('disbursalSummaryCards').classList.add('hidden');
-        document.getElementById('disbursalCharts').classList.add('hidden');
-        document.getElementById('disbursalTableWrapper').classList.add('hidden');
-        document.getElementById('disbursalNoData').classList.add('hidden');
+        // Keep cards, charts, and table visible even on error
     }
 }
 
@@ -7742,7 +7761,18 @@ function switchTab(tabName) {
     // Initialize daily performance tab if it's being switched to
     if (tabName === 'dailyPerformance') {
         console.log('Switching to daily performance tab - loading data...');
-        loadDailyPerformanceData();
+        // Ensure main content is visible when tab is switched
+        setTimeout(() => {
+            const mainContentEl = document.getElementById('dailyPerformanceMainContent');
+            if (mainContentEl) {
+                mainContentEl.classList.remove('hidden');
+            }
+            const loadingEl = document.getElementById('dailyPerformanceLoading');
+            if (loadingEl) {
+                loadingEl.classList.add('hidden');
+            }
+            loadDailyPerformanceData();
+        }, 50);
     }
 
     // Initialize credit person tab if it's being switched to
@@ -10058,7 +10088,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
 
             <!-- Data Section -->
-            <div id="creditPersonDataSection" class="hidden space-y-6">
+            <div id="creditPersonDataSection" class="space-y-6">
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div class="card bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-emerald-500/10 border border-emerald-500/20">
