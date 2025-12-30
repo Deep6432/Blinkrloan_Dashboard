@@ -204,9 +204,9 @@ if (window.history.replaceState) {
                         <div class="flex items-center gap-3">
                             <div class="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 shadow-lg">
                                 <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
-                                </svg>
-                            </div>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                    </svg>
+                </div>
                             <div>
                                 <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">Filters</h3>
                                 <p class="text-xs text-gray-400">Refine your search criteria</p>
@@ -259,7 +259,7 @@ if (window.history.replaceState) {
                                             <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                             </svg>
-                                        </div>
+                                </div>
                                     </div>
                                 </div>
                                 <div class="flex gap-2 sm:mb-0 mb-2">
@@ -7418,7 +7418,7 @@ function openFullScreenChart(chartType) {
         window.fullScreenChartInstance.destroy();
     }
     
-    // Create new chart in full-screen canvas
+    // Create new chart in full-screen canvas with labels disabled
     window.fullScreenChartInstance = new Chart(canvas, {
         type: 'pie',
         data: chartData,
@@ -7437,6 +7437,7 @@ function openFullScreenChart(chartType) {
                     }
                 },
                 tooltip: {
+                    enabled: true,
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     titleColor: '#ffffff',
                     bodyColor: '#ffffff',
@@ -7451,6 +7452,16 @@ function openFullScreenChart(chartType) {
                             return `${label}: ${formatCurrency(value)} (${percentage}%)`;
                         }
                     }
+                },
+                // Explicitly disable data labels (numbers on pie slices) in fullscreen
+                // Only show values in tooltip on hover
+                datalabels: {
+                    display: false
+                }
+            },
+            elements: {
+                arc: {
+                    borderWidth: 2
                 }
             }
         }
