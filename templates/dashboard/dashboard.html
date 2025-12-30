@@ -74,7 +74,7 @@ if (window.history.replaceState) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                             </svg>
                         </div>
-                        <h1 class="text-lg font-semibold text-white">Analytics Dashboard</h1>
+                        <h1 class="text-lg font-semibold text-white">Edge Analytics Dashboard</h1>
                     </div>
                     <p class="text-xs text-gray-400">Performance insights</p>
                     <div class="text-xs text-gray-400 mt-1">
@@ -97,7 +97,7 @@ if (window.history.replaceState) {
                             </svg>
                         </div>
                         <div class="flex items-center gap-3">
-                        <h1 class="text-2xl font-semibold text-white">Analytics Dashboard</h1>
+                        <h1 class="text-2xl font-semibold text-white">Edge Analytics Dashboard</h1>
                             <div id="refresh-indicator-inline" class="flex items-center"></div>
                         </div>
                     </div>
@@ -197,18 +197,23 @@ if (window.history.replaceState) {
         <!-- Disbursal Summary Tab -->
         <div id="disbursalContent" class="tab-content hidden">
             <!-- Filter Section -->
-            <div class="card mb-6 border border-gray-700/30 shadow-lg">
-                <div class="p-4">
+            <div class="card mb-6 border border-gray-700/30 shadow-xl bg-gradient-to-br from-gray-900/50 to-gray-800/30 backdrop-blur-sm">
+                <div class="p-5">
                     <!-- Collapsible Header -->
-                    <div class="flex items-center justify-between mb-3 cursor-pointer group" onclick="toggleDisbursalFilters()">
-                        <div class="flex items-center gap-2">
-                            <svg class="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="flex items-center justify-between mb-4 cursor-pointer group" onclick="toggleDisbursalFilters()">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 shadow-lg">
+                                <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
                     </svg>
-                            <h3 class="text-base font-semibold text-white group-hover:text-blue-400 transition-colors">Filters</h3>
                 </div>
-                        <button type="button" class="p-1.5 hover:bg-gray-700/50 rounded transition-colors" id="disbursalFiltersToggle">
-                            <svg id="disbursalFiltersToggleIcon" class="h-4 w-4 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div>
+                                <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">Filters</h3>
+                                <p class="text-xs text-gray-400">Refine your search criteria</p>
+                            </div>
+                        </div>
+                        <button type="button" class="p-2 hover:bg-gray-700/50 rounded-lg transition-all duration-200 hover:scale-110" id="disbursalFiltersToggle">
+                            <svg id="disbursalFiltersToggleIcon" class="h-5 w-5 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                             </svg>
                         </button>
@@ -217,25 +222,55 @@ if (window.history.replaceState) {
                     <!-- Collapsible Content -->
                     <div id="disbursalFiltersContent" class="hidden transition-all duration-300 ease-in-out overflow-hidden">
                         <!-- Date Range Section -->
-                        <div class="mb-4 pb-4 border-b border-gray-700/30">
-                            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div class="mb-5 pb-5 border-b border-gray-700/40">
+                            <div class="flex items-center gap-2 mb-3">
+                                <svg class="h-4 w-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                <h4 class="text-sm font-semibold text-gray-300">Date Range</h4>
+                            </div>
+                            <div class="flex flex-col sm:flex-row items-start sm:items-end gap-4">
                                 <div class="flex-1 min-w-[160px]">
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">Start Date</label>
-                                    <input type="date" id="disbursalStartDate" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all" onchange="handleDisbursalDateChange()">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                        </svg>
+                                        Start Date
+                                    </label>
+                                    <div class="relative">
+                                        <input type="date" id="disbursalStartDate" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all hover:border-gray-500/70" onchange="handleDisbursalDateChange()">
+                                        <div class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="flex-1 min-w-[160px]">
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">End Date</label>
-                                    <input type="date" id="disbursalEndDate" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all" onchange="handleDisbursalDateChange()">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                        </svg>
+                                        End Date
+                                    </label>
+                                    <div class="relative">
+                                        <input type="date" id="disbursalEndDate" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all hover:border-gray-500/70" onchange="handleDisbursalDateChange()">
+                                        <div class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
                                 </div>
-                                <div class="flex gap-2 sm:mt-6">
-                                    <button onclick="applyDisbursalFilters()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-1.5 whitespace-nowrap">
-                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 sm:mb-0 mb-2">
+                                    <button onclick="applyDisbursalFilters()" class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl flex items-center gap-2 whitespace-nowrap transform hover:scale-105">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                         </svg>
-                                        Apply
+                                        Apply Filters
                                     </button>
-                                    <button onclick="resetDisbursalFilters()" class="px-3 py-2 bg-gray-700/50 hover:bg-gray-600/50 border border-gray-600/50 text-white text-xs font-medium rounded-md transition-all flex items-center justify-center whitespace-nowrap" title="Reset Filters">
-                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <button onclick="resetDisbursalFilters()" class="px-4 py-2.5 bg-gray-700/60 hover:bg-gray-600/60 border border-gray-600/50 text-white text-sm font-medium rounded-lg transition-all flex items-center justify-center whitespace-nowrap hover:scale-105" title="Reset Filters">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                         </svg>
                                     </button>
@@ -245,30 +280,57 @@ if (window.history.replaceState) {
                         
                         <!-- Additional Filters Section -->
                         <div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div class="flex items-center gap-2 mb-3">
+                                <svg class="h-4 w-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                                </svg>
+                                <h4 class="text-sm font-semibold text-gray-300">Additional Filters</h4>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">State</label>
-                                    <select id="disbursalStateFilter" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all cursor-pointer" onchange="handleDisbursalStateChange()">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        </svg>
+                                        State
+                                    </label>
+                                    <select id="disbursalStateFilter" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all cursor-pointer hover:border-gray-500/70" onchange="handleDisbursalStateChange()">
                                         <option value="">All States</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">City</label>
-                                    <select id="disbursalCityFilter" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all cursor-pointer">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                        </svg>
+                                        City
+                                    </label>
+                                    <select id="disbursalCityFilter" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 transition-all cursor-pointer hover:border-gray-500/70">
                                         <option value="">All Cities</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">Reloan</label>
-                                    <select id="disbursalReloanFilter" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all cursor-pointer">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        Reloan Status
+                                    </label>
+                                    <select id="disbursalReloanFilter" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all cursor-pointer hover:border-gray-500/70">
                                         <option value="">All</option>
                                         <option value="true">Reloan</option>
                                         <option value="false">Fresh</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-400 mb-1.5">Tenure</label>
-                                    <input type="text" id="disbursalTenureFilter" placeholder="e.g., 30 or 30-60" class="input-field w-full text-sm px-3 py-2 rounded-md border border-gray-600/50 bg-gray-800/30 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all">
+                                    <label class="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                        <svg class="h-3.5 w-3.5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        Tenure
+                                    </label>
+                                    <input type="text" id="disbursalTenureFilter" placeholder="e.g., 30 or 30-60" class="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-white placeholder-gray-500 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 transition-all hover:border-gray-500/70">
                                 </div>
                             </div>
                         </div>
@@ -299,7 +361,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Summary Cards -->
-            <div id="disbursalSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-6 hidden">
+            <div id="disbursalSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-6">
                 <div class="card">
                     <div class="p-6">
                         <div class="flex items-center justify-between mb-2">
@@ -405,7 +467,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Pie Charts -->
-            <div id="disbursalCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 hidden">
+            <div id="disbursalCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <!-- State Pie Chart -->
                 <div class="card">
                     <div class="p-6">
@@ -462,7 +524,7 @@ if (window.history.replaceState) {
             </div>
 
             <!-- Data Table -->
-            <div id="disbursalTableWrapper" class="card hidden">
+            <div id="disbursalTableWrapper" class="card">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-white">Disbursal Records</h3>
@@ -3115,13 +3177,12 @@ async function loadDailyPerformanceData(silentRefresh = false) {
     try {
         console.log('Loading daily performance metrics data...');
         
-        // Show loading state only on initial load, not during auto-refresh
+        // Never show loading screen - keep all elements visible at all times
         const loadingEl = document.getElementById('dailyPerformanceLoading');
         const mainContentEl = document.getElementById('dailyPerformanceMainContent');
-        if (!silentRefresh) {
-            if (loadingEl) loadingEl.classList.remove('hidden');
-            if (mainContentEl) mainContentEl.classList.add('hidden');
-        }
+        // Always hide loading and keep main content visible
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (mainContentEl) mainContentEl.classList.remove('hidden');
         
         // Fetch data from API
         const response = await fetch('/api/daily-performance-metrics/');
@@ -3136,12 +3197,6 @@ async function loadDailyPerformanceData(silentRefresh = false) {
         window.dailyPerformanceData = data;
         
         console.log('Daily performance data received:', data);
-        
-        // Hide loading state and show main content (only if we showed it)
-        if (!silentRefresh) {
-            if (loadingEl) loadingEl.classList.add('hidden');
-            if (mainContentEl) mainContentEl.classList.remove('hidden');
-        }
         
         // Update position date - always use today's date (local timezone)
         const positionDateEl = document.getElementById('positionDate');
@@ -3168,6 +3223,8 @@ async function loadDailyPerformanceData(silentRefresh = false) {
                 const targetValue = sp.monthly_target || 120000000;
                 const formattedValue = formatNumberWithCommas(targetValue);
                 monthlyTargetInput.value = formattedValue;
+            } else {
+                console.warn('monthlyTargetInput element not found');
             }
             
             // Update Today's Disbursement
@@ -3179,14 +3236,29 @@ async function loadDailyPerformanceData(silentRefresh = false) {
             } else {
                 console.error('todayDisbursement element not found');
             }
-            document.getElementById('totalAchieved').textContent = formatCurrency(sp.total_achieved || 0);
-            document.getElementById('achievementPercentage').textContent = (sp.achievement_percentage || 0).toFixed(2);
-            document.getElementById('yetToAchieve').textContent = formatCurrency(sp.yet_to_achieve || 0);
-            document.getElementById('yetToAchievePercentage').textContent = (sp.yet_to_achieve_percentage || 0).toFixed(2);
-            document.getElementById('daysCompleted').textContent = sp.days_completed || 0;
-            document.getElementById('remainingDays').textContent = sp.remaining_days || 0;
-            document.getElementById('currentDailyPerformance').textContent = formatCurrency(sp.current_daily_performance || 0);
-            document.getElementById('requiredDailyPerformance').textContent = formatCurrency(sp.required_daily_performance || 0);
+            const totalAchievedEl = document.getElementById('totalAchieved');
+            if (totalAchievedEl) totalAchievedEl.textContent = formatCurrency(sp.total_achieved || 0);
+            
+            const achievementPercentageEl = document.getElementById('achievementPercentage');
+            if (achievementPercentageEl) achievementPercentageEl.textContent = (sp.achievement_percentage || 0).toFixed(2);
+            
+            const yetToAchieveEl = document.getElementById('yetToAchieve');
+            if (yetToAchieveEl) yetToAchieveEl.textContent = formatCurrency(sp.yet_to_achieve || 0);
+            
+            const yetToAchievePercentageEl = document.getElementById('yetToAchievePercentage');
+            if (yetToAchievePercentageEl) yetToAchievePercentageEl.textContent = (sp.yet_to_achieve_percentage || 0).toFixed(2);
+            
+            const daysCompletedEl = document.getElementById('daysCompleted');
+            if (daysCompletedEl) daysCompletedEl.textContent = sp.days_completed || 0;
+            
+            const remainingDaysEl = document.getElementById('remainingDays');
+            if (remainingDaysEl) remainingDaysEl.textContent = sp.remaining_days || 0;
+            
+            const currentDailyPerformanceEl = document.getElementById('currentDailyPerformance');
+            if (currentDailyPerformanceEl) currentDailyPerformanceEl.textContent = formatCurrency(sp.current_daily_performance || 0);
+            
+            const requiredDailyPerformanceEl = document.getElementById('requiredDailyPerformance');
+            if (requiredDailyPerformanceEl) requiredDailyPerformanceEl.textContent = formatCurrency(sp.required_daily_performance || 0);
         }
         
         // Update Collection Efficiency section
@@ -3201,7 +3273,8 @@ async function loadDailyPerformanceData(silentRefresh = false) {
                     (efficiency >= ce.benchmark_efficiency ? 'bg-green-600' : 
                      efficiency >= ce.benchmark_efficiency * 0.8 ? 'bg-yellow-600' : 'bg-red-600');
             }
-            document.getElementById('benchmarkEfficiency').textContent = (ce.benchmark_efficiency || 0).toFixed(0);
+            const benchmarkEfficiencyEl = document.getElementById('benchmarkEfficiency');
+            if (benchmarkEfficiencyEl) benchmarkEfficiencyEl.textContent = (ce.benchmark_efficiency || 0).toFixed(0);
         }
         
         // Update Historical Collection Efficiency table
@@ -3248,11 +3321,12 @@ async function loadDailyPerformanceData(silentRefresh = false) {
         
     } catch (error) {
         console.error('Error loading daily performance data:', error);
+        // Keep elements visible even on error
         const loadingEl = document.getElementById('dailyPerformanceLoading');
         const mainContentEl = document.getElementById('dailyPerformanceMainContent');
         if (loadingEl) loadingEl.classList.add('hidden');
         if (mainContentEl) mainContentEl.classList.remove('hidden');
-        // Show error message
+        // Show error message but keep content visible
         alert('Failed to load daily performance metrics. Please try again.');
     }
 }
@@ -4795,6 +4869,10 @@ function setupAutoRefresh() {
             } else if (activeTab === 'creditPerson') {
                 await loadCreditPersonData();
                 console.log('Credit Person Wise tab data refreshed successfully');
+            } else if (activeTab === 'disbursal') {
+                // Refresh Disbursal Summary tab (silent refresh - no loading screen)
+                await loadDisbursalData(true);
+                console.log('Disbursal Summary tab data refreshed successfully');
             } else if (activeTab === 'aumReport') {
                 // Refresh AUM Report tab (silent refresh - no loading screen)
                 // Get current active button state to maintain filter
@@ -6218,20 +6296,29 @@ async function loadCreditPersonData() {
     const { startDate, endDate } = getCreditPersonDateRange();
     const loanType = getCreditPersonLoanType();
 
-    loadingEl?.classList.remove('hidden');
+    // Never show loading screen - keep all elements visible at all times
+    loadingEl?.classList.add('hidden');
     errorEl?.classList.add('hidden');
-    noDataEl?.classList.add('hidden');
-    dataSectionEl?.classList.add('hidden');
+    // Keep data section always visible
+    dataSectionEl?.classList.remove('hidden');
 
     if (!startDate || !endDate) {
-        loadingEl?.classList.add('hidden');
+        if (!errorMessageEl) {
         alert('Please select both start and end dates for Credit Person Wise data.');
+        } else {
+            errorMessageEl.textContent = 'Please select both start and end dates for Credit Person Wise data.';
+            errorEl?.classList.remove('hidden');
+        }
         return;
     }
 
     if (new Date(startDate) > new Date(endDate)) {
-        loadingEl?.classList.add('hidden');
+        if (!errorMessageEl) {
         alert('Start date must be before end date for Credit Person Wise data.');
+        } else {
+            errorMessageEl.textContent = 'Start date must be before end date for Credit Person Wise data.';
+            errorEl?.classList.remove('hidden');
+        }
         return;
     }
 
@@ -6276,19 +6363,20 @@ async function loadCreditPersonData() {
             return;
         }
 
+        // Update values - elements remain visible
         renderCreditPersonSummary(aggregated);
         renderCreditPersonChart(aggregated);
         renderCreditPersonTable(aggregated);
 
-        dataSectionEl?.classList.remove('hidden');
+        // Hide no data message if we have data
+        noDataEl?.classList.add('hidden');
     } catch (error) {
         console.error('Error loading credit person data:', error);
         if (errorMessageEl) {
             errorMessageEl.textContent = error.message || 'Failed to load data. Please try again later.';
         }
         errorEl?.classList.remove('hidden');
-    } finally {
-        loadingEl?.classList.add('hidden');
+        // Keep data section visible even on error
     }
 }
 
@@ -6921,7 +7009,7 @@ function handleDisbursalDateChange() {
     }
 }
 
-async function loadDisbursalData() {
+async function loadDisbursalData(silentRefresh = false) {
     try {
         const startDateInput = document.getElementById('disbursalStartDate');
         const endDateInput = document.getElementById('disbursalEndDate');
@@ -6946,7 +7034,9 @@ async function loadDisbursalData() {
         
         if (!startDate || !endDate) {
             console.error('Dates still not set after default');
+            if (!silentRefresh) {
             alert('Please select both start and end dates');
+            }
             return;
         }
         
@@ -6978,13 +7068,15 @@ async function loadDisbursalData() {
         
         console.log('Fetching from API with params:', params.toString());
         
-        // Show loading state
-        document.getElementById('disbursalLoading').classList.remove('hidden');
+        // Never show loading screen - keep all elements visible at all times
+        // Only hide error state
+        document.getElementById('disbursalLoading').classList.add('hidden');
         document.getElementById('disbursalError').classList.add('hidden');
-        document.getElementById('disbursalSummaryCards').classList.add('hidden');
-        document.getElementById('disbursalCharts').classList.add('hidden');
-        document.getElementById('disbursalTableWrapper').classList.add('hidden');
-        document.getElementById('disbursalNoData').classList.add('hidden');
+        
+        // Ensure cards, charts, and table are visible (show them if hidden)
+        document.getElementById('disbursalSummaryCards').classList.remove('hidden');
+        document.getElementById('disbursalCharts').classList.remove('hidden');
+        document.getElementById('disbursalTableWrapper').classList.remove('hidden');
         
         const apiUrl = `/api/disbursal-summary/?${params.toString()}`;
         console.log('Fetching disbursal data from:', apiUrl);
@@ -7011,20 +7103,17 @@ async function loadDisbursalData() {
             throw new Error(data.error);
         }
         
-        // Hide loading state
-        document.getElementById('disbursalLoading').classList.add('hidden');
-        
         // Update filter dropdowns with available options
         if (data.filters) {
             updateDisbursalFilterOptions(data.filters);
         }
         
-        // Update summary cards
+        // Update summary cards (always visible, just update values)
         if (data.summary) {
             updateDisbursalSummaryCards(data.summary);
         }
         
-        // Update pie charts
+        // Update pie charts (always visible, just update data)
         if (data.chart_data) {
             if (data.chart_data.state && data.chart_data.state.length > 0) {
                 updateDisbursalStateChart(data.chart_data.state);
@@ -7032,34 +7121,26 @@ async function loadDisbursalData() {
             if (data.chart_data.city && data.chart_data.city.length > 0) {
                 updateDisbursalCityChart(data.chart_data.city);
             }
-            document.getElementById('disbursalCharts').classList.remove('hidden');
-        } else {
-            document.getElementById('disbursalCharts').classList.add('hidden');
         }
         
-        // Update table
+        // Update table (always visible, just update data)
         updateDisbursalTable(data.records, data.pagination);
         
-        // Show data sections
+        // Always keep cards, charts, and table visible - only update values
+        // Show/hide no data message based on records
         if (data.records && data.records.length > 0) {
-            document.getElementById('disbursalSummaryCards').classList.remove('hidden');
-            document.getElementById('disbursalTableWrapper').classList.remove('hidden');
             document.getElementById('disbursalNoData').classList.add('hidden');
         } else {
-            document.getElementById('disbursalSummaryCards').classList.add('hidden');
-            document.getElementById('disbursalTableWrapper').classList.add('hidden');
             document.getElementById('disbursalNoData').classList.remove('hidden');
         }
         
     } catch (error) {
         console.error('Error loading disbursal data:', error);
+        // Show error but keep all elements visible
         document.getElementById('disbursalLoading').classList.add('hidden');
         document.getElementById('disbursalError').classList.remove('hidden');
         document.getElementById('disbursalErrorMessage').textContent = error.message || 'Failed to load disbursal data. Please try again.';
-        document.getElementById('disbursalSummaryCards').classList.add('hidden');
-        document.getElementById('disbursalCharts').classList.add('hidden');
-        document.getElementById('disbursalTableWrapper').classList.add('hidden');
-        document.getElementById('disbursalNoData').classList.add('hidden');
+        // Keep cards, charts, and table visible even on error
     }
 }
 
@@ -7356,7 +7437,7 @@ function openFullScreenChart(chartType) {
         window.fullScreenChartInstance.destroy();
     }
     
-    // Create new chart in full-screen canvas
+    // Create new chart in full-screen canvas with labels disabled
     window.fullScreenChartInstance = new Chart(canvas, {
         type: 'pie',
         data: chartData,
@@ -7375,6 +7456,7 @@ function openFullScreenChart(chartType) {
                     }
                 },
                 tooltip: {
+                    enabled: true,
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     titleColor: '#ffffff',
                     bodyColor: '#ffffff',
@@ -7389,6 +7471,16 @@ function openFullScreenChart(chartType) {
                             return `${label}: ${formatCurrency(value)} (${percentage}%)`;
                         }
                     }
+                },
+                // Explicitly disable data labels (numbers on pie slices) in fullscreen
+                // Only show values in tooltip on hover
+                datalabels: {
+                    display: false
+                }
+            },
+            elements: {
+                arc: {
+                    borderWidth: 2
                 }
             }
         }
@@ -7669,7 +7761,18 @@ function switchTab(tabName) {
     // Initialize daily performance tab if it's being switched to
     if (tabName === 'dailyPerformance') {
         console.log('Switching to daily performance tab - loading data...');
-        loadDailyPerformanceData();
+        // Ensure main content is visible when tab is switched
+        setTimeout(() => {
+            const mainContentEl = document.getElementById('dailyPerformanceMainContent');
+            if (mainContentEl) {
+                mainContentEl.classList.remove('hidden');
+            }
+            const loadingEl = document.getElementById('dailyPerformanceLoading');
+            if (loadingEl) {
+                loadingEl.classList.add('hidden');
+            }
+            loadDailyPerformanceData();
+        }, 50);
     }
 
     // Initialize credit person tab if it's being switched to
@@ -9985,7 +10088,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
 
             <!-- Data Section -->
-            <div id="creditPersonDataSection" class="hidden space-y-6">
+            <div id="creditPersonDataSection" class="space-y-6">
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div class="card bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-emerald-500/10 border border-emerald-500/20">

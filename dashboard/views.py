@@ -2942,7 +2942,10 @@ def api_daily_performance_metrics(request):
         
     except Exception as e:
         logger.error(f"Error fetching daily performance metrics: {e}", exc_info=True)
-        return JsonResponse({'error': 'Failed to fetch data'}, status=500)
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Full traceback: {error_trace}")
+        return JsonResponse({'error': f'Failed to fetch data: {str(e)}'}, status=500)
 
 
 @require_http_methods(["GET"])
