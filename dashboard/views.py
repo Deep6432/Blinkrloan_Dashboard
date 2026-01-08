@@ -131,7 +131,13 @@ def calculate_kpi_from_records(records):
             'fresh_recoverable_excl_90': 0,
             'fresh_recovery_percentage_excl_90': 0,
             'reloan_recoverable_excl_90': 0,
-            'reloan_recovery_percentage_excl_90': 0
+            'reloan_recovery_percentage_excl_90': 0,
+            # Pre Collection fields
+            'pre_collection_amount': 0,
+            'pre_collection_percentage_over_collected': 0,
+            'pre_collection_over_repayment': 0,
+            'fresh_pre_collection_amount': 0,
+            'reloan_pre_collection_amount': 0
         }
     
     # Calculate totals with safe conversion
@@ -213,6 +219,24 @@ def calculate_kpi_from_records(records):
     reloan_recoverable_excl_90 = reloan_received_excl_90 - reloan_interest_excl_90
     reloan_recovery_percentage_excl_90 = float((reloan_recoverable_excl_90 / reloan_sanction_excl_90) * 100) if reloan_sanction_excl_90 > 0 else 0
     
+    # Calculate Pre Collection Amount (from records with closed_status = 'Pre-Close')
+    pre_close_records = [r for r in records if r.get('closed_status') == 'Pre-Close']
+    pre_collection_amount = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in pre_close_records)
+    
+    # Calculate Pre Collection percentage over total collected amount
+    pre_collection_percentage_over_collected = float((pre_collection_amount / collected_amount) * 100) if collected_amount > 0 else 0
+    
+    # Calculate Pre Collection as on date range over repayment
+    # This is the same as pre_collection_amount but we'll calculate it separately for clarity
+    pre_collection_over_repayment = float((pre_collection_amount / repayment_amount) * 100) if repayment_amount > 0 else 0
+    
+    # Calculate Fresh and Reloan pre-collection amounts
+    fresh_pre_close_records = [r for r in fresh_records if r.get('closed_status') == 'Pre-Close']
+    reloan_pre_close_records = [r for r in reloan_records if r.get('closed_status') == 'Pre-Close']
+    
+    fresh_pre_collection_amount = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in fresh_pre_close_records)
+    reloan_pre_collection_amount = sum(safe_decimal_conversion(r.get('total_received', 0)) for r in reloan_pre_close_records)
+    
     return {
         'total_applications': total_applications,
         'sanction_amount': float(sanction_amount),
@@ -246,7 +270,13 @@ def calculate_kpi_from_records(records):
         'fresh_recoverable_excl_90': float(fresh_recoverable_excl_90),
         'fresh_recovery_percentage_excl_90': round(fresh_recovery_percentage_excl_90, 2),
         'reloan_recoverable_excl_90': float(reloan_recoverable_excl_90),
-        'reloan_recovery_percentage_excl_90': round(reloan_recovery_percentage_excl_90, 2)
+        'reloan_recovery_percentage_excl_90': round(reloan_recovery_percentage_excl_90, 2),
+        # Pre Collection fields
+        'pre_collection_amount': float(pre_collection_amount),
+        'pre_collection_percentage_over_collected': round(pre_collection_percentage_over_collected, 2),
+        'pre_collection_over_repayment': round(pre_collection_over_repayment, 2),
+        'fresh_pre_collection_amount': float(fresh_pre_collection_amount),
+        'reloan_pre_collection_amount': float(reloan_pre_collection_amount)
     }
 
 def get_kpi_data(queryset):
@@ -2538,10 +2568,11 @@ def api_disbursal_summary(request):
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
         
-        # Filter records by disbursal_date to ensure date range is correct
+        # Filter records by disbursal_date_ist to ensure date range is correct
         date_filtered_records = []
         for record in disbursal_records:
-            disbursal_date_str = record.get('disbursal_date')
+            # API returns 'disbursal_date_ist' field, not 'disbursal_date'
+            disbursal_date_str = record.get('disbursal_date_ist') or record.get('disbursal_date')
             if disbursal_date_str:
                 parsed_date = parse_datetime_safely(disbursal_date_str)
                 if parsed_date:
@@ -2693,6 +2724,11 @@ def api_disbursal_summary(request):
         start_idx = (page - 1) * per_page
         end_idx = start_idx + per_page
         paginated_records = filtered_records[start_idx:end_idx]
+        
+        # Add 'disbursal_date' field for frontend compatibility (using disbursal_date_ist value)
+        for record in paginated_records:
+            if 'disbursal_date_ist' in record and 'disbursal_date' not in record:
+                record['disbursal_date'] = record['disbursal_date_ist']
         
         return JsonResponse({
             'records': paginated_records,
