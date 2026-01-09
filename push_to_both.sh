@@ -51,8 +51,15 @@ if [ "$CURRENT_BRANCH" = "prod" ]; then
     echo -e "${YELLOW}Switching to main branch...${NC}"
     git checkout main
     
-    echo -e "${YELLOW}Merging prod into main...${NC}"
-    git merge prod -m "Merge prod into main: $COMMIT_MSG"
+    echo -e "${YELLOW}Applying changes to main branch...${NC}"
+    git checkout prod -- dashboard/views.py templates/dashboard/dashboard.html 2>/dev/null || true
+    git add dashboard/views.py templates/dashboard/dashboard.html 2>/dev/null || true
+    
+    if ! git diff --staged --quiet; then
+        git commit -m "$COMMIT_MSG"
+    else
+        echo -e "${YELLOW}No new changes to commit in main${NC}"
+    fi
     
     echo -e "${GREEN}Pushing to main branch...${NC}"
     git push origin main || git push
@@ -67,8 +74,15 @@ elif [ "$CURRENT_BRANCH" = "main" ]; then
     echo -e "${YELLOW}Switching to prod branch...${NC}"
     git checkout prod
     
-    echo -e "${YELLOW}Merging main into prod...${NC}"
-    git merge main -m "Merge main into prod: $COMMIT_MSG"
+    echo -e "${YELLOW}Applying changes to prod branch...${NC}"
+    git checkout main -- dashboard/views.py templates/dashboard/dashboard.html 2>/dev/null || true
+    git add dashboard/views.py templates/dashboard/dashboard.html 2>/dev/null || true
+    
+    if ! git diff --staged --quiet; then
+        git commit -m "$COMMIT_MSG"
+    else
+        echo -e "${YELLOW}No new changes to commit in prod${NC}"
+    fi
     
     echo -e "${GREEN}Pushing to prod branch...${NC}"
     git push edge_uat prod || git push origin prod

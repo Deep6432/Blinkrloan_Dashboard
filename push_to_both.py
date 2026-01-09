@@ -64,9 +64,17 @@ def main():
         print("Switching to main branch...")
         run_command("git checkout main")
         
-        # Merge prod into main
-        print("Merging prod into main...")
-        run_command(f'git merge prod -m "Merge prod into main: {commit_msg}"')
+        # Apply changes directly to main (not merge)
+        print("Applying changes to main branch...")
+        run_command("git checkout prod -- dashboard/views.py templates/dashboard/dashboard.html", check=False)
+        run_command("git add dashboard/views.py templates/dashboard/dashboard.html", check=False)
+        
+        # Check if there are changes to commit
+        _, returncode = run_command("git diff --staged --quiet", check=False)
+        if returncode != 0:
+            run_command(f'git commit -m "{commit_msg}"')
+        else:
+            print("No new changes to commit in main")
         
         # Push to main
         print("Pushing to main branch...")
@@ -85,9 +93,17 @@ def main():
         print("Switching to prod branch...")
         run_command("git checkout prod")
         
-        # Merge main into prod
-        print("Merging main into prod...")
-        run_command(f'git merge main -m "Merge main into prod: {commit_msg}"')
+        # Apply changes directly to prod (not merge)
+        print("Applying changes to prod branch...")
+        run_command("git checkout main -- dashboard/views.py templates/dashboard/dashboard.html", check=False)
+        run_command("git add dashboard/views.py templates/dashboard/dashboard.html", check=False)
+        
+        # Check if there are changes to commit
+        _, returncode = run_command("git diff --staged --quiet", check=False)
+        if returncode != 0:
+            run_command(f'git commit -m "{commit_msg}"')
+        else:
+            print("No new changes to commit in prod")
         
         # Push to prod
         print("Pushing to prod branch...")
