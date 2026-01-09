@@ -74,7 +74,7 @@ if (window.history.replaceState) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                             </svg>
                         </div>
-                        <h1 class="text-lg font-semibold text-white">Edge Analytics Dashboard</h1>
+                        <h1 class="text-base font-semibold text-white">Edge Analytics Dashboard</h1>
                     </div>
                     <p class="text-xs text-gray-400">Performance insights</p>
                     <div class="text-xs text-gray-400 mt-1">
@@ -97,7 +97,7 @@ if (window.history.replaceState) {
                             </svg>
                         </div>
                         <div class="flex items-center gap-3">
-                        <h1 class="text-2xl font-semibold text-white">Edge Analytics Dashboard</h1>
+                        <h1 class="text-xl font-semibold text-white">Edge Analytics Dashboard</h1>
                             <div id="refresh-indicator-inline" class="flex items-center"></div>
                         </div>
                     </div>
@@ -827,6 +827,7 @@ if (window.history.replaceState) {
 
 
         <!-- Mobile Responsive Collection Status and Principal Outstanding -->
+        <!-- Top Row: 3 Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <!-- Collected Amount Card -->
             <div class="kpi-card">
@@ -931,6 +932,84 @@ if (window.history.replaceState) {
                         </div>
                         <div class="text-right">
                             <span class="font-medium text-white" id="reloanPrincipalOutstanding" data-amount="{{ kpis.reloan_principal_outstanding|default:0 }}"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: 3 Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
+            <!-- Pre Collection Amount Card -->
+            <div class="kpi-card">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="p-1.5 rounded-md bg-cyan-500/10 border border-cyan-500/20">
+                        <svg class="h-4 w-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                        </svg>
+                    </div>
+                    <div class="text-sm text-cyan-400">Pre Collection Amount</div>
+                </div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-3xl font-semibold text-cyan-400" id="preCollectionAmount" data-amount="{{ kpis.pre_collection_amount|default:0 }}"></div>
+                    <div class="text-sm text-cyan-300 text-right">
+                        <div id="preCollectionPercentageOverCollected">{{ kpis.pre_collection_percentage_over_collected|default:0|floatformat:2 }}% of Total</div>
+                        <div class="text-cyan-300">Collected Amount</div>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span class="text-gray-300">Fresh</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="freshPreCollectionAmount" data-amount="{{ kpis.fresh_pre_collection_amount|default:0 }}"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <span class="text-gray-300">Reloan</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="reloanPreCollectionAmount" data-amount="{{ kpis.reloan_pre_collection_amount|default:0 }}"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pre Collection as on Date Range over Repayment Card -->
+            <div class="kpi-card">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="p-1.5 rounded-md bg-indigo-500/10 border border-indigo-500/20">
+                        <svg class="h-4 w-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <div class="text-sm text-indigo-400">Pre Collection / Repayment</div>
+                </div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-3xl font-semibold text-indigo-400" id="preCollectionOverRepaymentAmount" data-amount="{{ kpis.pre_collection_amount|default:0 }}"></div>
+                    <div class="text-sm text-indigo-300" id="preCollectionOverRepaymentPercentage">{{ kpis.pre_collection_over_repayment|default:0|floatformat:2 }}% of Repayment</div>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span class="text-gray-300">Fresh</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="freshPreCollectionOverRepayment" data-amount="{{ kpis.fresh_pre_collection_amount|default:0 }}"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <span class="text-gray-300">Reloan</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-medium text-white" id="reloanPreCollectionOverRepayment" data-amount="{{ kpis.reloan_pre_collection_amount|default:0 }}"></span>
                         </div>
                     </div>
                 </div>
@@ -5085,6 +5164,66 @@ async function refreshKPIData(params) {
                 reloanPrincipalOutstandingElement.textContent = formatCurrency(kpis.reloan_principal_outstanding);
             }
             
+            // Update Pre Collection Amount
+            const preCollectionAmountElement = document.getElementById('preCollectionAmount');
+            if (preCollectionAmountElement) {
+                preCollectionAmountElement.textContent = formatCurrency(kpis.pre_collection_amount || 0);
+            }
+            
+            // Update Pre Collection Percentage Over Collected
+            const preCollectionPercentageOverCollectedElement = document.getElementById('preCollectionPercentageOverCollected');
+            if (preCollectionPercentageOverCollectedElement) {
+                const preCollectionPct = kpis.pre_collection_percentage_over_collected || 0;
+                const preCollectionPctNum = typeof preCollectionPct === 'string' ? parseFloat(preCollectionPct) : preCollectionPct;
+                if (preCollectionPctNum !== undefined && preCollectionPctNum !== null && !isNaN(preCollectionPctNum)) {
+                    preCollectionPercentageOverCollectedElement.textContent = preCollectionPctNum.toFixed(2) + '% of Total';
+                } else {
+                    preCollectionPercentageOverCollectedElement.textContent = '0.00% of Total';
+                }
+            }
+            
+            // Update Fresh Pre Collection Amount
+            const freshPreCollectionAmountElement = document.getElementById('freshPreCollectionAmount');
+            if (freshPreCollectionAmountElement) {
+                freshPreCollectionAmountElement.textContent = formatCurrency(kpis.fresh_pre_collection_amount || 0);
+            }
+            
+            // Update Reloan Pre Collection Amount
+            const reloanPreCollectionAmountElement = document.getElementById('reloanPreCollectionAmount');
+            if (reloanPreCollectionAmountElement) {
+                reloanPreCollectionAmountElement.textContent = formatCurrency(kpis.reloan_pre_collection_amount || 0);
+            }
+            
+            // Update Pre Collection Over Repayment Amount
+            const preCollectionOverRepaymentAmountElement = document.getElementById('preCollectionOverRepaymentAmount');
+            if (preCollectionOverRepaymentAmountElement) {
+                preCollectionOverRepaymentAmountElement.textContent = formatCurrency(kpis.pre_collection_amount || 0);
+            }
+            
+            // Update Pre Collection Over Repayment Percentage
+            const preCollectionOverRepaymentPercentageElement = document.getElementById('preCollectionOverRepaymentPercentage');
+            if (preCollectionOverRepaymentPercentageElement) {
+                const preCollectionOverRepaymentPct = kpis.pre_collection_over_repayment || 0;
+                const preCollectionOverRepaymentPctNum = typeof preCollectionOverRepaymentPct === 'string' ? parseFloat(preCollectionOverRepaymentPct) : preCollectionOverRepaymentPct;
+                if (preCollectionOverRepaymentPctNum !== undefined && preCollectionOverRepaymentPctNum !== null && !isNaN(preCollectionOverRepaymentPctNum)) {
+                    preCollectionOverRepaymentPercentageElement.textContent = preCollectionOverRepaymentPctNum.toFixed(2) + '% of Repayment';
+                } else {
+                    preCollectionOverRepaymentPercentageElement.textContent = '0.00% of Repayment';
+                }
+            }
+            
+            // Update Fresh Pre Collection Over Repayment
+            const freshPreCollectionOverRepaymentElement = document.getElementById('freshPreCollectionOverRepayment');
+            if (freshPreCollectionOverRepaymentElement) {
+                freshPreCollectionOverRepaymentElement.textContent = formatCurrency(kpis.fresh_pre_collection_amount || 0);
+            }
+            
+            // Update Reloan Pre Collection Over Repayment
+            const reloanPreCollectionOverRepaymentElement = document.getElementById('reloanPreCollectionOverRepayment');
+            if (reloanPreCollectionOverRepaymentElement) {
+                reloanPreCollectionOverRepaymentElement.textContent = formatCurrency(kpis.reloan_pre_collection_amount || 0);
+            }
+            
             // Update Principal Outstanding Excluding 90+ DPD (Recovery %)
             const recoverableAmountExcl90Element = document.getElementById('recoverableAmountExcl90');
             if (recoverableAmountExcl90Element) {
@@ -7771,7 +7910,7 @@ function switchTab(tabName) {
             if (loadingEl) {
                 loadingEl.classList.add('hidden');
             }
-            loadDailyPerformanceData();
+        loadDailyPerformanceData();
         }, 50);
     }
 
@@ -9361,7 +9500,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
         <!-- Mobile Responsive Collection Status and Principal Outstanding -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <!-- Collected Amount Card -->
             <div class="kpi-card">
                 <div class="flex items-center gap-2 mb-2">
